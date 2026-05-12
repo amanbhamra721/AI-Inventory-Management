@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, Response, BackgroundTasks
 import os
 import requests
+import time
 from dotenv import load_dotenv
 
 from app.services.document_router import process_document
@@ -13,11 +14,11 @@ VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 
+# Ensure DB is ready on startup
 setup_database()
 
 @router.get("/webhook")
 async def verify_webhook(request: Request):
-    # ... (Keep your existing GET logic exactly as is) ...
     params = request.query_params
     if params.get("hub.verify_token") == VERIFY_TOKEN:
         return Response(content=params.get("hub.challenge"), media_type="text/plain")
@@ -25,126 +26,128 @@ async def verify_webhook(request: Request):
 
 
 # ---------------------------------------------------------
-# NEW: The Background Worker Function
+# BACKGROUND TASK: The "Heavy Lifting"
 # ---------------------------------------------------------
 def process_image_task(media_id: str, sender_no: str):
-    """This runs in the background so Meta doesn't time out."""
+    """Handles image download, Gemini processing (with retries), and DB storage."""
     print(f"\n⚙️ [BACKGROUND TASK] Starting pipeline for Media ID: {media_id}")
+    temp_filename = f"incoming_{media_id}.jpg"
+    
     try:
-        # Let's verify the token actually exists in memory!
         if not WHATSAPP_TOKEN:
-            print("🚨 FATAL ERROR: WHATSAPP_TOKEN is missing or None!")
+            print("🚨 FATAL ERROR: WHATSAPP_TOKEN is missing!")
             return
 
         header = {"Authorization": f"Bearer {WHATSAPP_TOKEN}"}
+        
+        # 1. Get Image URL from Meta
         response = requests.get(f"https://graph.facebook.com/v18.0/{media_id}", headers=header)
         media_info = response.json()
         
         download_url = media_info.get("url")
         if not download_url:
-            print(f"❌ Failed to get URL for {media_id}")
-            # 🔥 THIS IS THE MAGIC LINE: Print Meta's exact error message
-            print(f"🔍 META ERROR DETAILS: {media_info}") 
+            print(f"❌ Failed to get URL for {media_id}. Details: {media_info}")
             return
 
-        # ... rest of your download logic ...
-
+        # 2. Download Image binary
         image_data = requests.get(download_url, headers=header).content
-        temp_filename = f"incoming_{media_id}.jpg"
-        
         with open(temp_filename, "wb") as f:
             f.write(image_data)
         
-        # Run AI Pipeline
-        result = process_document(temp_filename)
+        # 3. AI Pipeline with Exponential Backoff (Fixes 503 Errors)
+        result = None
+        max_retries = 3
+        delay = 2  # Start with 2 seconds
+
+        for attempt in range(max_retries):
+            try:
+                print(f"[Step 0] Analyzing Document (Attempt {attempt + 1}/{max_retries})...")
+                result = process_document(temp_filename)
+                if result:
+                    break  # Success!
+            except Exception as e:
+                # Check for Gemini 503 or 429
+                if ("503" in str(e) or "UNAVAILABLE" in str(e)) and attempt < max_retries - 1:
+                    print(f"⚠️ Gemini busy. Retrying in {delay}s...")
+                    time.sleep(delay)
+                    delay *= 2  # Exponential backoff: 2s, 4s, 8s
+                    continue
+                else:
+                    print(f"❌ AI Pipeline failed: {e}")
+                    break
         
+        # 4. Handle Result and Database
         if result:
-            # 1. Save to Database
             insert_transaction(result)
-            print(f"✅ Success! Data from {sender_no} saved. (Media ID: {media_id})")
-            
-            # 2. Extract data safely from the nested JSON
+            print(f"✅ Success! Data from {sender_no} saved.")
+
+            # Data Extraction
             doc_type = result.get("transaction_type", "UNKNOWN")
-            
-            # THE FIX: Looking for "items" instead of "line_items"
             items_array = result.get("items", [])
-            items_processed = len(items_array) 
-            
-            # Drill down into the summary block
             summary = result.get("summary", {})
-            total_thaans = summary.get("total_thaans", 0)
-            total_meters = summary.get("total_meters", 0)
-            grand_total = summary.get("grand_total_amount")
             
-            # 3. Format the message
+            # Format Response
             icon = "🟢 INWARD" if doc_type == "INWARD" else "🔴 OUTWARD"
-            
             reply_msg = (
                 f"{icon} RECORDED\n"
-                f"Rows Processed: {items_processed}\n"
-                f"Total Thaans: {int(total_thaans)}\n"
-                f"Total Meters: {total_meters} Meters\n"
+                f"Rows: {len(items_array)}\n"
+                f"Total Thaans: {int(summary.get('total_thaans', 0))}\n"
+                f"Total Meters: {summary.get('total_meters', 0)}m\n"
             )
             
-            # Add the financial total only if it's an Outward document
-            if doc_type == "OUTWARD" and grand_total is not None:
-                reply_msg += f"Grand Total: ₹{grand_total}\n"
-                
-            reply_msg += f"\nLogged successfully to inventory. ✅"
+            if doc_type == "OUTWARD" and summary.get("grand_total_amount"):
+                reply_msg += f"Grand Total: ₹{summary.get('grand_total_amount')}\n"
             
-            # 4. Send the message!
+            reply_msg += "\nLogged successfully. ✅"
             send_whatsapp_text(sender_no, reply_msg)
             
         else:
-            # Send a failure message if the AI couldn't read it
-            error_msg = "⚠️ Could not process this receipt. Please ensure the image is clear and try again."
-            send_whatsapp_text(sender_no, error_msg)
-            
-        # Clean up
-        if os.path.exists(temp_filename):
-            os.remove(temp_filename)
+            send_whatsapp_text(sender_no, "⚠️ Could not process image. Please try again later.")
 
     except Exception as e:
         print(f"❌ Background Task Error: {e}")
+    finally:
+        # 5. Clean up temporary file
+        if os.path.exists(temp_filename):
+            os.remove(temp_filename)
 
 
 # ---------------------------------------------------------
-# UPDATED: The POST Route
+# WEBHOOK POST: Instant Acknowledgment
 # ---------------------------------------------------------
 @router.post("/webhook")
 async def receive_whatsapp_message(request: Request, background_tasks: BackgroundTasks):
     try:
         body = await request.json()
-        entry = body.get("entry", [{}])[0]
-        changes = entry.get("changes", [{}])[0]
-        value = changes.get("value", {})
+        value = body.get("entry", [{}])[0].get("changes", [{}])[0].get("value", {})
 
-        # Handle Status Updates
+        # Ignore status updates (sent, delivered, read)
         if "statuses" in value:
             return {"status": "success"}
 
         messages = value.get("messages", [])
         if not messages:
-            return {"status": "no_new_messages"}
+            return {"status": "no_messages"}
 
         message = messages[0]
         sender_no = message.get("from")
 
+        # Route images to the background task
         if message.get("type") == "image":
             media_id = message["image"]["id"]
-            print(f"📥 Received Image webhook! Instantly acknowledging Meta...")
-            
-            # 🔥 Pass the heavy lifting to the background task!
+            print(f"📥 Image received from {sender_no}. Passing to background...")
             background_tasks.add_task(process_image_task, media_id, sender_no)
 
-        return {"status": "success"} # 🔥 This hits Meta instantly, stopping the loop!
+        return {"status": "success"}  # Sent instantly to Meta
 
     except Exception as e:
         print(f"❌ Webhook Error: {e}")
         return {"status": "error"}
-    
+
+# ---------------------------------------------------------
+# HELPER: Send Text Reply
+# ---------------------------------------------------------
 def send_whatsapp_text(to_number: str, text_message: str):
-    """Sends a plain text message back to the WhatsApp user."""
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
@@ -158,5 +161,8 @@ def send_whatsapp_text(to_number: str, text_message: str):
     }
     
     response = requests.post(url, headers=headers, json=payload)
+    
+    # Fix for the 'to_phone_number' bug: Use 'to_number' variable
+    print(f"DEBUG: Meta API Response for {to_number}: {response.status_code}")
     if response.status_code != 200:
-        print(f"❌ Failed to send reply: {response.text}")
+        print(f"❌ Failed to send: {response.text}")
