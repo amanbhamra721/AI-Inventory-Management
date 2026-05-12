@@ -1,14 +1,18 @@
-# app/main.py
 from fastapi import FastAPI
-import uvicorn
-from app.api.webhook import router as webhook_router
+from fastapi.staticfiles import StaticFiles
+from app.api.webhook import router as whatsapp_router
+from app.web.dashboard import router as web_router
 
-app = FastAPI(title="WhatsApp Inventory Webhook")
+app = FastAPI(title="The Koshak Inventory")
 
-# Register the webhook endpoints
-app.include_router(webhook_router)
+# Mount Static Files (CSS/Images)
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
-if __name__ == "__main__":
-    print("🚀 Starting FastAPI Server on http://localhost:5000")
-    # Using app.main:app allows the server to auto-reload if you change code
-    uvicorn.run("app.main:app", host="0.0.0.0", port=5000, reload=True)
+# Mount your routers
+app.include_router(whatsapp_router, prefix="/api") # Now at api.thekoshak.com/api/webhook
+app.include_router(web_router) # Now at api.thekoshak.com/
+
+@app.on_event("startup")
+def startup_db():
+    from app.services.db import setup_database
+    setup_database()

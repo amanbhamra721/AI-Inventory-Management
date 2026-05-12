@@ -102,3 +102,80 @@ def insert_transaction(data):
     finally:
         cursor.close()
         conn.close()
+
+def get_inventory_summary(sender_phone: str = None):
+    """
+    Calculates total Inwards, Outwards, and Net Stock.
+    If sender_phone is provided, it filters for that specific customer (requires adding sender_phone to receipts table).
+    """
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    try:
+        # SQL updated to use 'receipts' and 'line_items'
+        # Note: If you want to filter by sender_phone, you'll need to add a sender_phone column to the receipts table
+        # and include it in the insert_transaction logic. For now, this summarizes all data.
+        query = """
+            SELECT 
+                r.transaction_type, 
+                SUM(li.meters) as total_qty  -- Assuming 'meters' is the primary unit to track
+            FROM receipts r
+            JOIN line_items li ON r.id = li.receipt_id
+            GROUP BY r.transaction_type
+        """
+        cur.execute(query) # Removed phone filter temporarily until schema supports it
+        rows = cur.fetchall()
+        
+        stats = {
+            "inward": 0,
+            "outward": 0,
+            "net_stock": 0
+        }
+        
+        for row in rows:
+            if row['transaction_type'] == 'INWARD':
+                stats['inward'] = float(row['total_qty'] or 0)
+            elif row['transaction_type'] == 'OUTWARD':
+                stats['outward'] = float(row['total_qty'] or 0)
+        
+        stats['net_stock'] = stats['inward'] - stats['outward']
+        
+        return stats
+
+    except Exception as e:
+        print(f"❌ DB Summary Error: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def get_inventory_details(sender_phone: str = None, limit: int = 50):
+    """
+    Fetches a detailed list of recent inventory items.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    try:
+        # SQL updated to use 'receipts' and 'line_items'
+        query = """
+            SELECT 
+                r.transaction_type,
+                r.created_at,
+                li.fabric as item_description,
+                li.meters as quantity,
+                'Meters' as unit
+            FROM line_items li
+            JOIN receipts r ON li.receipt_id = r.id
+            ORDER BY r.created_at DESC
+            LIMIT %s
+        """
+        cur.execute(query, (limit,)) # Removed phone filter temporarily
+        return cur.fetchall()
+
+    except Exception as e:
+        print(f"❌ DB Details Error: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()

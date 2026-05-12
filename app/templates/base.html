@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.19/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>The Koshak</title>
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/static/manifest.json">
+
+    <!-- iOS Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Koshak">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2830/2830305.png">
+
+    <!-- Android Theme Color -->
+    <meta name="theme-color" content="#2563eb">
+</head>
+<body class="bg-slate-50 pb-20"> <!-- pb-20 to make room for bottom nav -->
+
+    <!-- Main Content -->
+    <main class="p-4">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Mobile Bottom Navigation -->
+    <div class="btm-nav border-t border-slate-200">
+        <!-- Pass the phone parameter along if it exists -->
+        <a href="/{% if phone %}?phone={{ phone }}{% endif %}" class="{% if request.url.path == '/' %}active{% endif %}">
+            <span class="btm-nav-label text-xs">Home</span>
+        </a>
+        
+        <a href="/inventory{% if phone %}?phone={{ phone }}{% endif %}" class="{% if request.url.path == '/inventory' %}active{% endif %}">
+            <span class="btm-nav-label text-xs">Inventory</span>
+        </a>
+        
+        <a href="https://wa.me/your_bot_number" target="_blank" class="bg-green-500 text-white">
+            <span class="btm-nav-label text-xs font-bold">Open Bot</span>
+        </a>
+    </div>
+</body>
+</html>
