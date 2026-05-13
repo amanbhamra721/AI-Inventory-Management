@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException, Form, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
-from app.services.db import get_db_connection, get_global_stats, get_stock_by_profile, get_inventory_details
+from app.services.db import get_db_connection, get_global_stats, get_stock_by_profile, get_stock_status_report
 from app.services.auth import verify_password
 import re
 from typing import Optional
