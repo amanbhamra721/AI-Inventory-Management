@@ -3,9 +3,6 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
-from passlib.context import CryptContext
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Load environment variables (Make sure your .env has DATABASE_URL)
 load_dotenv()
