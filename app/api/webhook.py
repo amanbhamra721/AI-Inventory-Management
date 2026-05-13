@@ -3,6 +3,7 @@ import os
 import requests
 import time
 from dotenv import load_dotenv
+import traceback
 
 from app.services.document_router import process_document
 from app.services.db import insert_transaction, setup_database
@@ -41,6 +42,7 @@ def process_image_task(media_id: str, sender_no: str):
         header = {"Authorization": f"Bearer {WHATSAPP_TOKEN}"}
         
         # 1. Get Image URL from Meta
+        print("[Step 1] Fetching Image URL from Meta...")
         response = requests.get(f"https://graph.facebook.com/v18.0/{media_id}", headers=header)
         media_info = response.json()
         
@@ -50,38 +52,51 @@ def process_image_task(media_id: str, sender_no: str):
             return
 
         # 2. Download Image binary
+        print("[Step 2] Downloading Image Binary...")
         image_data = requests.get(download_url, headers=header).content
         with open(temp_filename, "wb") as f:
             f.write(image_data)
         
-        # 3. AI Pipeline with Exponential Backoff (Fixes 503 Errors)
+        # 3. AI Pipeline with Exponential Backoff
         result = None
         max_retries = 3
         delay = 2  # Start with 2 seconds
 
         for attempt in range(max_retries):
             try:
-                print(f"[Step 0] Analyzing Document (Attempt {attempt + 1}/{max_retries})...")
+                print(f"[Step 3] Analyzing Document (Attempt {attempt + 1}/{max_retries})...")
                 result = process_document(temp_filename)
                 if result:
                     break  # Success!
             except Exception as e:
-                # Check for Gemini 503 or 429
                 if ("503" in str(e) or "UNAVAILABLE" in str(e)) and attempt < max_retries - 1:
                     print(f"⚠️ Gemini busy. Retrying in {delay}s...")
                     time.sleep(delay)
-                    delay *= 2  # Exponential backoff: 2s, 4s, 8s
+                    delay *= 2
                     continue
                 else:
-                    print(f"❌ AI Pipeline failed: {e}")
+                    print(f"❌ AI Pipeline failed during extraction:")
+                    print(traceback.format_exc()) # Explicit traceback for AI errors
                     break
         
         # 4. Handle Result and Database
         if result:
-            insert_transaction(result)
-            print(f"✅ Success! Data from {sender_no} saved.")
+            print("[Step 4] Inserting data into database...")
+            
+            # --- CRITICAL FIX ---
+            # Inject the WhatsApp number into the AI result so the database knows who owns this data!
+            result["sender_phone"] = sender_no 
+            
+            try:
+                insert_transaction(result)
+                print(f"✅ Success! Data from {sender_no} saved to database.")
+            except Exception as db_e:
+                print("❌ DATABASE INSERTION ERROR:")
+                print(traceback.format_exc()) # Explicit traceback for DB errors
+                send_whatsapp_text(sender_no, "⚠️ System Error: Could not save receipt to the database.")
+                return
 
-            # Data Extraction
+            # Data Extraction for WhatsApp Reply
             doc_type = result.get("transaction_type", "UNKNOWN")
             items_array = result.get("items", [])
             summary = result.get("summary", {})
@@ -105,11 +120,13 @@ def process_image_task(media_id: str, sender_no: str):
             send_whatsapp_text(sender_no, "⚠️ Could not process image. Please try again later.")
 
     except Exception as e:
-        print(f"❌ Background Task Error: {e}")
+        print(f"❌ CRITICAL BACKGROUND TASK ERROR:")
+        print(traceback.format_exc()) # THIS prints the exact line number of any crash
     finally:
         # 5. Clean up temporary file
         if os.path.exists(temp_filename):
             os.remove(temp_filename)
+            print("🗑️ Temporary image cleaned up.")
 
 
 # ---------------------------------------------------------
@@ -141,7 +158,7 @@ async def receive_whatsapp_message(request: Request, background_tasks: Backgroun
         return {"status": "success"}  # Sent instantly to Meta
 
     except Exception as e:
-        print(f"❌ Webhook Error: {e}")
+        print(f"❌ Webhook POST Error: {e}")
         return {"status": "error"}
 
 # ---------------------------------------------------------
@@ -162,7 +179,6 @@ def send_whatsapp_text(to_number: str, text_message: str):
     
     response = requests.post(url, headers=headers, json=payload)
     
-    # Fix for the 'to_phone_number' bug: Use 'to_number' variable
-    print(f"DEBUG: Meta API Response for {to_number}: {response.status_code}")
+    print(f"DEBUG: Meta API Reply Response for {to_number}: {response.status_code}")
     if response.status_code != 200:
-        print(f"❌ Failed to send: {response.text}")
+        print(f"❌ Failed to send reply: {response.text}")
