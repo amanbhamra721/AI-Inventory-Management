@@ -33,16 +33,6 @@ async def show_index(request: Request, search: Optional[str] = None):
     stock_report = get_stock_status_report(user_phone, search_term=search) if search else full_stock_report
     alerts = [item for item in stock_report if item['status'] != 'HEALTHY']
     
-    # Calculate total inward and outward across ALL items
-    total_inward = 0
-    total_outward = 0
-    for item in full_stock_report:
-        current_meters = item['current_meters']
-        # Calculate inward/outward based on net position and transaction history
-        # This requires summing from raw data - using current_meters to estimate
-        if current_meters > 0:
-            total_inward += current_meters
-    
     # Get raw inward/outward from database for accurate totals
     conn = get_db_connection()
     cur = conn.cursor()
@@ -56,11 +46,11 @@ async def show_index(request: Request, search: Optional[str] = None):
             FROM inventory_ledger
             WHERE sender_phone = %s
         """, (user_phone,))
-        result = cur.fetchone()
-        total_inward = result[0] if result[0] else 0
-        total_outward = result[1] if result[1] else 0
-        net_meters = result[2] if result[2] else 0
-        net_thaans = result[3] if result[3] else 0
+        result = cur.fetchone() or {}
+        total_inward = result.get("total_inward") or 0
+        total_outward = result.get("total_outward") or 0
+        net_meters = result.get("net_meters") or 0
+        net_thaans = result.get("net_thaans") or 0
     finally:
         cur.close()
         conn.close()
