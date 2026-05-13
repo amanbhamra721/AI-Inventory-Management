@@ -12,7 +12,7 @@
         <div class="card-body p-4 flex flex-row items-center justify-between">
             
             <div>
-                <h2 class="card-title text-sm font-bold text-slate-800">{{ item.item_description | default('Unknown Item', true) }}</h2>
+                <h2 class="card-title text-sm font-bold text-slate-800">{{ item.fabric | default('Unknown Item', true) }}</h2>
                 <div class="text-[10px] text-slate-400 mt-1 font-medium">
                     {{ item.created_at.strftime('%b %d, %I:%M %p') if item.created_at else 'Unknown Date' }}
                 </div>

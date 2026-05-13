@@ -107,8 +107,28 @@ def process_image_task(media_id: str, sender_no: str):
         # 4. Handle Result and Database
         if result:
             logger.info("[Step 4] Formatting data for Database Insertion...")
-            result["sender_phone"] = sender_no 
             
+            # 1. Inject Sender Info
+            result["sender_phone"] = sender_no 
+
+            # 2. FABRIC MAPPING & NORMALIZATION
+            # Define your master list here
+            fabric_mapping = {
+                "dhanlaxmi": "Dhanlaxmi full voile",
+                "dhanlakshmi": "Dhanlaxmi full voile",
+                "full voile": "Dhanlaxmi full voile"
+            }
+
+            raw_fabric = result.get("fabric", "").lower().strip()
+            
+            # Check if we have a professional name for what Gemini found
+            if raw_fabric in fabric_mapping:
+                result["fabric"] = fabric_mapping[raw_fabric]
+            else:
+                # Fallback: Just make it look clean (Capitalize first letter)
+                result["fabric"] = raw_fabric.capitalize()
+            
+            # 3. Database Insertion
             try:
                 insert_transaction(result)
                 logger.info(f"✅ Success! Transaction from {sender_no} saved to DB.")
@@ -117,15 +137,15 @@ def process_image_task(media_id: str, sender_no: str):
                 send_whatsapp_text(sender_no, "⚠️ System Error: Could not save receipt to the database.")
                 return
 
-            # Data Extraction for WhatsApp Reply
+            # --- Rest of your WhatsApp Reply logic stays the same ---
             doc_type = result.get("transaction_type", "UNKNOWN")
             items_array = result.get("items", [])
             summary = result.get("summary", {})
             
-            # Format Response
             icon = "🟢 INWARD" if doc_type == "INWARD" else "🔴 OUTWARD"
             reply_msg = (
                 f"{icon} RECORDED\n"
+                f"Fabric: {result['fabric']}\n" # Added this so the user sees the fixed name
                 f"Rows: {len(items_array)}\n"
                 f"Total Thaans: {int(summary.get('total_thaans', 0))}\n"
                 f"Total Meters: {summary.get('total_meters', 0)}m\n"
