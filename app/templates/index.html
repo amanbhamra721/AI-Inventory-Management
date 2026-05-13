@@ -6,6 +6,40 @@
     <p class="text-sm text-slate-500">Real-time inventory overview</p>
 </div>
 
+<!-- INJECTED: Critical Alerts Section -->
+{% if alerts %}
+<div class="mb-8">
+    <h3 class="font-bold text-red-600 mb-3 flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+        </svg>
+        Critical Stock Alerts
+    </h3>
+    <div class="space-y-3">
+        {% for alert in alerts %}
+        <div class="bg-red-50 p-4 rounded-xl shadow-sm border border-red-200 flex justify-between items-center">
+            <div>
+                <p class="font-bold text-red-800 text-sm">{{ alert.fabric }}</p>
+                <div class="flex gap-2 mt-1.5">
+                    <span class="text-[10px] bg-red-100 px-2 py-0.5 rounded font-medium text-red-600 border border-red-200">Shade: {{ alert.shade_code or 'N/A' }}</span>
+                </div>
+            </div>
+            <div class="text-right flex flex-col justify-center items-end">
+                <p class="text-xl font-bold text-red-600 leading-none">
+                    {{ alert.current_meters }}
+                </p>
+                <p class="text-[9px] text-red-400 font-bold uppercase mt-1">Meters Left</p>
+                {% if alert.status == 'OUT_OF_STOCK' %}
+                <span class="mt-2 inline-block text-[9px] bg-red-600 text-white px-2 py-0.5 rounded uppercase tracking-wider font-bold">Out of Stock</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+<!-- END OF ALERTS SECTION -->
+
 <!-- 1. Top Summary Cards -->
 <div class="grid grid-cols-1 gap-4 mb-8">
     <div class="card bg-blue-600 text-white shadow-xl">
@@ -25,6 +59,33 @@
             <div class="text-red-500 text-2xl font-bold mt-1">{{ stats.total_outward | default(0, true) }}</div>
         </div>
     </div>
+</div>
+
+<!-- NEW INJECTED SECTION: The Control Bar -->
+<div class="flex flex-col md:flex-row justify-between items-center gap-4 mb-6 mt-8 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+    
+    <!-- Search Form -->
+    <form action="/" method="GET" class="flex gap-2 w-full md:w-2/3">
+        <input 
+            type="text" 
+            name="search" 
+            value="{{ search_query }}" 
+            placeholder="Search by Fabric Name or Shade Code (e.g. 7015)..." 
+            class="input input-bordered w-full focus:border-blue-500 text-sm" 
+        />
+        <button type="submit" class="btn btn-primary btn-sm h-12 px-6">Search</button>
+        {% if search_query %}
+        <a href="/" class="btn btn-ghost btn-sm h-12 text-slate-500">Clear</a>
+        {% endif %}
+    </form>
+
+    <!-- Export Button -->
+    <a href="/export/csv" class="btn btn-outline btn-success w-full md:w-auto btn-sm h-12 flex items-center justify-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        Export CSV
+    </a>
 </div>
 
 <!-- 2. Live Stock by Profile -->

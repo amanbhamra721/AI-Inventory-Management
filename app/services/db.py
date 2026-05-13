@@ -310,3 +310,52 @@ def get_inventory_details(sender_phone: str = None, limit: int = 50):
     finally:
         cur.close()
         conn.close()
+
+
+
+# app/services/db.py
+
+def get_stock_status_report(sender_phone: str, threshold_meters: float = 50.0, search_term: str = None):
+    """
+    Calculates live stock levels with an optional search filter.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Base query
+    query = """
+    SELECT 
+        fabric, 
+        shade_code, 
+        SUM(CASE WHEN transaction_type = 'INWARD' THEN meters ELSE -meters END) as current_meters,
+        SUM(CASE WHEN transaction_type = 'INWARD' THEN thaans ELSE -thaans END) as current_thaans
+    FROM inventory_ledger
+    WHERE sender_phone = %s
+    """
+    params = [sender_phone]
+    
+    # Add search filter if provided
+    if search_term:
+        query += " AND (fabric ILIKE %s OR shade_code ILIKE %s)"
+        search_pattern = f"%{search_term}%"
+        params.extend([search_pattern, search_pattern])
+        
+    query += " GROUP BY fabric, shade_code ORDER BY fabric ASC, shade_code ASC"
+    
+    try:
+        cur.execute(query, tuple(params))
+        rows = cur.fetchall()
+        
+        report = []
+        for row in rows:
+            status = "HEALTHY"
+            if row['current_meters'] <= 0:
+                status = "OUT_OF_STOCK"
+            elif row['current_meters'] < threshold_meters:
+                status = "LOW_STOCK"
+            
+            report.append({**row, "status": status})
+        return report
+    finally:
+        cur.close()
+        conn.close()

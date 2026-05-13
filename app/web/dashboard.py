@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Form, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
-from app.services.db import get_global_stats, get_stock_by_profile, get_inventory_details
+from app.services.db import get_db_connection, get_global_stats, get_stock_by_profile, get_inventory_details
 from app.services.auth import verify_password
 import re
+from typing import Optional
+import io
+import csv
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -18,23 +21,56 @@ def get_current_user(request: Request):
 
 
 @router.get("/")
-async def show_dashboard(request: Request, phone: str = None):
-    user = get_current_user(request)
-    if not user:
-        return RedirectResponse(url="/login") # Redirect to login if not authenticated
+async def show_index(request: Request, search: Optional[str] = None):
+    user_phone = request.cookies.get("auth_user")
+    if not user_phone:
+        return RedirectResponse(url="/login")
 
-    # Fetch ERP data
-    stats = get_global_stats(sender_phone=phone)
-    profiles = get_stock_by_profile(sender_phone=phone)
+    # Fetch report, passing the search term if it exists
+    stock_report = get_stock_status_report(user_phone, search_term=search)
+    alerts = [item for item in stock_report if item['status'] != 'HEALTHY']
     
-    return templates.TemplateResponse(
-        "index.html", 
-        {
-            "request": request, 
-            "stats": stats,
-            "profiles": profiles,
-            "phone": phone
-        }
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "stock_report": stock_report,
+        "alerts": alerts,
+        "search_query": search or "" # Pass the search back to UI
+    })
+
+@router.get("/export/csv")
+async def export_inventory_csv(request: Request):
+    """Generates a downloadable CSV of the current inventory."""
+    user_phone = request.cookies.get("auth_user")
+    if not user_phone:
+        return RedirectResponse(url="/login")
+
+    # Fetch the full, unfiltered report for export
+    stock_report = get_stock_status_report(user_phone)
+
+    # Build the CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write Headers
+    writer.writerow(["Fabric", "Shade Code", "Current Meters", "Current Thaans", "Status"])
+    
+    # Write Data
+    for item in stock_report:
+        writer.writerow([
+            item['fabric'], 
+            item['shade_code'], 
+            item['current_meters'], 
+            item['current_thaans'], 
+            item['status'].replace('_', ' ')
+        ])
+
+    output.seek(0)
+    
+    # Return as a downloadable file
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=live_inventory_report.csv"}
     )
 
 @router.get("/inventory")
