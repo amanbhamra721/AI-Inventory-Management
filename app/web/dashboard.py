@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, HTTPException, Form, Response
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from app.services.db import get_db_connection, get_global_stats, get_stock_by_profile, get_stock_status_report, get_inventory_details
 from app.services.auth import verify_password
 import re
@@ -26,25 +26,59 @@ async def show_index(request: Request, search: Optional[str] = None):
     if not user_phone:
         return RedirectResponse(url="/login")
 
-    # Fetch report, passing the search term if it exists
-    stock_report = get_stock_status_report(user_phone, search_term=search)
+    # Fetch full report WITHOUT search for total calculations
+    full_stock_report = get_stock_status_report(user_phone)
+    
+    # Fetch report WITH search for display
+    stock_report = get_stock_status_report(user_phone, search_term=search) if search else full_stock_report
     alerts = [item for item in stock_report if item['status'] != 'HEALTHY']
     
-    # FIX: Calculate the total stats for your dashboard cards
-    net_meters = sum(item['current_meters'] for item in stock_report)
-    net_thaans = sum(item['current_thaans'] for item in stock_report)
+    # Calculate total inward and outward across ALL items
+    total_inward = 0
+    total_outward = 0
+    for item in full_stock_report:
+        current_meters = item['current_meters']
+        # Calculate inward/outward based on net position and transaction history
+        # This requires summing from raw data - using current_meters to estimate
+        if current_meters > 0:
+            total_inward += current_meters
+    
+    # Get raw inward/outward from database for accurate totals
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT 
+                SUM(CASE WHEN transaction_type = 'INWARD' THEN meters ELSE 0 END) as total_inward,
+                SUM(CASE WHEN transaction_type = 'OUTWARD' THEN meters ELSE 0 END) as total_outward,
+                SUM(CASE WHEN transaction_type = 'INWARD' THEN meters ELSE -meters END) as net_meters,
+                SUM(CASE WHEN transaction_type = 'INWARD' THEN thaans ELSE -thaans END) as net_thaans
+            FROM inventory_ledger
+            WHERE sender_phone = %s
+        """, (user_phone,))
+        result = cur.fetchone()
+        total_inward = result[0] if result[0] else 0
+        total_outward = result[1] if result[1] else 0
+        net_meters = result[2] if result[2] else 0
+        net_thaans = result[3] if result[3] else 0
+    finally:
+        cur.close()
+        conn.close()
     
     stats = {
-        "net_stock": round(net_meters, 2),
-        "total_thaans": net_thaans
+        "net_stock": round(net_meters, 2) if net_meters else 0,
+        "total_inward": round(total_inward, 2) if total_inward else 0,
+        "total_outward": round(total_outward, 2) if total_outward else 0,
+        "total_thaans": net_thaans if net_thaans else 0
     }
     
     return templates.TemplateResponse("index.html", {
         "request": request,
         "stock_report": stock_report,
+        "profiles": stock_report,  # Added: This is what was missing for Live Stock by Profile!
         "alerts": alerts,
         "search_query": search or "",
-        "stats": stats  # <--- This is what was missing!
+        "stats": stats
     })
 
 @router.get("/export/csv")
