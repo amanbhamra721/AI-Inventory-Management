@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException, Form, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
-from app.services.db import get_db_connection, get_global_stats, get_stock_by_profile, get_stock_status_report
+from app.services.db import get_db_connection, get_global_stats, get_stock_by_profile, get_stock_status_report, get_inventory_details
 from app.services.auth import verify_password
 import re
 from typing import Optional
@@ -84,18 +84,18 @@ async def export_inventory_csv(request: Request):
     )
 
 @router.get("/inventory")
-async def show_inventory(request: Request, phone: str = None):
-    # Fetch Ledger History
+async def show_inventory(request: Request):
+    phone = request.cookies.get("auth_user")
+    if not phone:
+        return RedirectResponse(url="/login")
+
+    # This is the line that was crashing
     items = get_inventory_details(sender_phone=phone)
     
-    return templates.TemplateResponse(
-        "inventory.html", 
-        {
-            "request": request, 
-            "items": items,
-            "phone": phone
-        }
-    )
+    return templates.TemplateResponse("inventory.html", {
+        "request": request, 
+        "items": items
+    })
 
 @router.get("/login")
 async def login_page(request: Request):

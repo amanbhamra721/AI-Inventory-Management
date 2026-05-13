@@ -281,36 +281,35 @@ def get_stock_by_profile(sender_phone: str = None):
         cur.close()
         conn.close()
 
-def get_inventory_details(sender_phone: str = None, limit: int = 50):
-    """Fetches the detailed ledger history for the transaction log."""
+# app/services/db.py
+
+def get_inventory_details(sender_phone: str):
+    """
+    Fetches every single transaction for the detailed inventory view.
+    """
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor()
+    
+    query = """
+    SELECT 
+        fabric, 
+        shade_code, 
+        bale_no, 
+        transaction_type, 
+        meters, 
+        thaans, 
+        created_at 
+    FROM inventory_ledger 
+    WHERE sender_phone = %s 
+    ORDER BY created_at DESC
+    """
+    
     try:
-        query = """
-            SELECT 
-                il.movement_type as transaction_type,
-                il.created_at,
-                cp.cloth_name as item_description,
-                ABS(il.quantity) as quantity,
-                il.unit,
-                cp.shade_number,
-                cp.width
-            FROM inventory_ledger il
-            JOIN receipts r ON il.receipt_id = r.id
-            JOIN cloth_profiles cp ON il.cloth_profile_id = cp.id
-            WHERE r.sender_phone = %s OR %s IS NULL
-            ORDER BY il.created_at DESC
-            LIMIT %s
-        """
-        cur.execute(query, (sender_phone, sender_phone, limit))
+        cur.execute(query, (sender_phone,))
         return cur.fetchall()
-    except Exception as e:
-        print(f"❌ DB Details Error: {e}")
-        return []
     finally:
         cur.close()
         conn.close()
-
 
 
 # app/services/db.py
