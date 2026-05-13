@@ -6,26 +6,56 @@
     <p class="text-sm text-slate-500">Real-time inventory overview</p>
 </div>
 
-<div class="grid grid-cols-1 gap-4">
-    <!-- Current Stock Card -->
+<!-- 1. Top Summary Cards -->
+<div class="grid grid-cols-1 gap-4 mb-8">
     <div class="card bg-blue-600 text-white shadow-xl">
         <div class="card-body p-6">
-            <h2 class="card-title text-sm opacity-80">Current Stock</h2>
+            <h2 class="card-title text-sm opacity-80">Total Inventory</h2>
             <p class="text-4xl font-bold">{{ stats.net_stock | default(0, true) }} <span class="text-lg font-normal opacity-80">Meters</span></p>
         </div>
     </div>
 
     <div class="grid grid-cols-2 gap-4">
-        <!-- Inward Stat -->
         <div class="stat bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-col justify-center">
-            <div class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Total Inward</div>
-            <div class="text-green-500 text-2xl font-bold mt-1">{{ stats.inward | default(0, true) }}</div>
+            <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Inward</div>
+            <div class="text-green-500 text-2xl font-bold mt-1">{{ stats.total_inward | default(0, true) }}</div>
         </div>
-        <!-- Outward Stat -->
         <div class="stat bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-col justify-center">
-            <div class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Total Outward</div>
-            <div class="text-red-500 text-2xl font-bold mt-1">{{ stats.outward | default(0, true) }}</div>
+            <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Outward</div>
+            <div class="text-red-500 text-2xl font-bold mt-1">{{ stats.total_outward | default(0, true) }}</div>
         </div>
     </div>
+</div>
+
+<!-- 2. Live Stock by Profile -->
+<div class="flex justify-between items-center mb-4 mt-8">
+    <h3 class="font-bold text-slate-700">Live Stock by Profile</h3>
+    <span class="badge badge-outline text-xs bg-white">{{ profiles | length }} Items</span>
+</div>
+
+<div class="space-y-3">
+    {% for item in profiles %}
+    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center">
+        <div>
+            <p class="font-bold text-slate-800 text-sm">{{ item.cloth_name }}</p>
+            <div class="flex gap-2 mt-1.5">
+                <span class="text-[9px] bg-slate-100 px-2 py-0.5 rounded font-medium text-slate-500 border border-slate-200">Shade: {{ item.shade_number or 'N/A' }}</span>
+                <span class="text-[9px] bg-slate-100 px-2 py-0.5 rounded font-medium text-slate-500 border border-slate-200">W: {{ item.width or '--' }}</span>
+            </div>
+        </div>
+        
+        <div class="text-right">
+            <!-- Visual Understock Alert Trigger -->
+            <p class="text-xl font-bold {% if item.available_qty < 50 %}text-red-500{% else %}text-slate-700{% endif %}">
+                {{ item.available_qty }}
+            </p>
+            <p class="text-[9px] text-slate-400 font-bold uppercase">Meters</p>
+        </div>
+    </div>
+    {% else %}
+    <div class="text-center py-8 text-slate-400 text-sm">
+        No stock profiles found.
+    </div>
+    {% endfor %}
 </div>
 {% endblock %}

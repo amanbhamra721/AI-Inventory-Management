@@ -2,48 +2,44 @@
 
 {% block content %}
 <div class="mb-5">
-    <h1 class="text-2xl font-bold text-slate-800">Transaction Log</h1>
+    <h1 class="text-2xl font-bold text-slate-800">Ledger History</h1>
     <p class="text-sm text-slate-500">Recent inventory movements</p>
 </div>
 
 <div class="space-y-3">
     {% for item in items %}
-    <div class="card bg-white shadow-sm border border-slate-100">
+    <div class="card bg-white shadow-sm border border-slate-100 rounded-xl">
         <div class="card-body p-4 flex flex-row items-center justify-between">
             
-            <!-- Left Side: Item Name & Date -->
             <div>
-                <h2 class="card-title text-base">{{ item.item_description | default('Unknown Item', true) }}</h2>
-                <div class="text-xs text-slate-400 mt-1">
-                    <!-- Format the PostgreSQL timestamp safely -->
+                <h2 class="card-title text-sm font-bold text-slate-800">{{ item.item_description | default('Unknown Item', true) }}</h2>
+                <div class="text-[10px] text-slate-400 mt-1 font-medium">
                     {{ item.created_at.strftime('%b %d, %I:%M %p') if item.created_at else 'Unknown Date' }}
                 </div>
+                {% if item.shade_number %}
+                <div class="text-[9px] text-slate-400 mt-1">Shade: {{ item.shade_number }}</div>
+                {% endif %}
             </div>
             
-            <!-- Right Side: Quantity & Type Badge -->
             <div class="text-right">
-                <div class="font-bold text-lg">
-                    {{ item.quantity }} <span class="text-xs font-normal text-slate-500">{{ item.unit }}</span>
+                <div class="font-bold text-lg text-slate-700">
+                    {{ item.quantity }} <span class="text-[10px] font-normal text-slate-400">{{ item.unit }}</span>
                 </div>
                 
-                <!-- Dynamic Badge Color -->
                 {% if item.transaction_type == 'INWARD' %}
-                    <div class="badge badge-sm badge-success text-white mt-1 border-none">INWARD</div>
+                    <div class="badge badge-sm bg-green-100 text-green-700 border-none font-bold text-[9px] px-2 py-2 mt-1">INWARD</div>
+                {% elif item.transaction_type == 'RETURN' %}
+                    <div class="badge badge-sm bg-blue-100 text-blue-700 border-none font-bold text-[9px] px-2 py-2 mt-1">RETURN</div>
                 {% else %}
-                    <div class="badge badge-sm badge-error text-white mt-1 border-none">OUTWARD</div>
+                    <div class="badge badge-sm bg-red-100 text-red-700 border-none font-bold text-[9px] px-2 py-2 mt-1">OUTWARD</div>
                 {% endif %}
             </div>
 
         </div>
     </div>
     {% else %}
-    
-    <!-- Empty State Fallback -->
-    <div class="text-center py-10 text-slate-400">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-        </svg>
-        <p>No inventory records found.</p>
+    <div class="text-center py-10 text-slate-400 text-sm">
+        No ledger records found.
     </div>
     {% endfor %}
 </div>

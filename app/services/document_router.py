@@ -36,7 +36,14 @@ def run_pipeline(image_path, doc_type, attempt=1, max_retries=3, retry_hint=None
     if doc_type == "INWARD":
         ocr_prompt = """
         ACT AS: High-precision OCR Engine. Transcribe this INWARD printed table.
-        RULES:
+        
+        HEADER EXTRACTION RULES:
+        1. Look at the top right header area.
+        2. Extract 'Bale No' (e.g., BR22633).
+        3. Extract 'Date' (e.g., 28/01/2025).
+        4. Extract 'Fold' (e.g., 100).
+        5. Extract 'Width' (e.g., 42").
+        TABLE RULES:
         1. Flatten into a single vertical list. Transcribe all items from the LEFT column (Sr 1-15) then RIGHT column (Sr 16-21).
         2. Must be exactly 21 lines, strictly numbered 1 to 21. Output plain text only.
         """
@@ -47,25 +54,47 @@ def run_pipeline(image_path, doc_type, attempt=1, max_retries=3, retry_hint=None
         3. FORCED RECONCILIATION: Before returning the JSON, silently sum the `meters` from all your extracted `items`. Compare your sum to the printed `total_meters`. If they do not match, YOU HAVE MADE AN OCR ERROR. Re-read the line items and correct your mistake before generating the final JSON. The printed total on the page is the Absolute Source of Truth.
 
         Convert OCR to strict JSON. Map to this structure:
-        {"transaction_type": "INWARD", "summary": {"total_thaans": float, "total_meters": float}, 
-         "items": [{"sr_no": int, "fabric": string, "thaans": float, "meters": float, "shade_code": string}]}
+        {
+        "transaction_type": "INWARD", 
+        "metadata": {
+            "bale_no": string, 
+            "date": string, 
+            "fold": string, 
+            "width": string
+        },
+        "summary": {"total_thaans": float, "total_meters": float}, 
+        "items": [{"sr_no": int, "fabric": string, "thaans": float, "meters": float, "shade_code": string}]
+        }
         """
         validator = validate_inward
         
     elif doc_type == "OUTWARD":
         ocr_prompt = """
         ACT AS: High-precision OCR Engine. Transcribe this OUTWARD handwritten estimate.
+        
+        HEADER EXTRACTION RULES:
+        1. Look at the top left/center. Extract the 'No.' (e.g., 1352).
+        2. Look at the top right 'Dated' field. Extract the date (e.g., 4/10).
+
         RULES:
         1. Transcribe the fabric names (e.g. F.V, Rubia).
         2. Extract the exact math equations written for each fabric (e.g., 48+34+59+47=476).
-        3. CRITICAL: Look at the far right 'AMOUNT Rs.' column. Transcribe the specific price/amount listed for each individual fabric block (e.g., 21896, 34986).
+        3. CRITICAL: Look at the far right 'AMOUNT Rs.' column. Transcribe the specific price/amount listed for each individual fabric block.
         4. Extract the final grand totals and GST at the bottom. Output plain text only.
         """
         json_prompt = """
         Convert OCR to strict JSON. Convert fractions (1/2 to .5, 3/4 to .75).
         Make sure to map the individual line-item amounts to the 'price' key for each fabric.
-        {"transaction_type": "OUTWARD", "summary": {"total_thaans": float, "total_meters": float, "grand_total_amount": float}, 
-         "items": [{"fabric": string, "thaans": float, "meters": float, "price": float}]}
+        
+        {
+        "transaction_type": "OUTWARD", 
+        "metadata": {
+            "receipt_no": string, 
+            "date": string
+        },
+        "summary": {"total_thaans": float, "total_meters": float, "grand_total_amount": float}, 
+        "items": [{"fabric": string, "thaans": float, "meters": float, "price": float}]
+        }
         """
         validator = validate_outward
 
