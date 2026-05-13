@@ -71,13 +71,13 @@ def setup_database():
     create_ledger_table = """
     CREATE TABLE IF NOT EXISTS inventory_ledger (
         id SERIAL PRIMARY KEY,
-        receipt_id INTEGER REFERENCES receipts(id) ON DELETE CASCADE,
-        cloth_profile_id INTEGER REFERENCES cloth_profiles(id),
-        movement_type VARCHAR(20) NOT NULL, -- INWARD, OUTWARD, RETURN, WRITE_OFF
-        quantity NUMERIC NOT NULL,
-        unit VARCHAR(20) NOT NULL,
-        price_per_unit NUMERIC(10, 2),
-        created_by VARCHAR(20),
+        sender_phone VARCHAR(20) NOT NULL,
+        fabric VARCHAR(100) NOT NULL,
+        shade_code VARCHAR(50) NOT NULL,
+        transaction_type VARCHAR(20) NOT NULL, -- 'INWARD' or 'OUTWARD'
+        meters NUMERIC(10, 2) DEFAULT 0,
+        thaans INTEGER DEFAULT 0,
+        bale_no VARCHAR(50),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
     """
