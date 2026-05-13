@@ -30,11 +30,21 @@ async def show_index(request: Request, search: Optional[str] = None):
     stock_report = get_stock_status_report(user_phone, search_term=search)
     alerts = [item for item in stock_report if item['status'] != 'HEALTHY']
     
+    # FIX: Calculate the total stats for your dashboard cards
+    net_meters = sum(item['current_meters'] for item in stock_report)
+    net_thaans = sum(item['current_thaans'] for item in stock_report)
+    
+    stats = {
+        "net_stock": round(net_meters, 2),
+        "total_thaans": net_thaans
+    }
+    
     return templates.TemplateResponse("index.html", {
         "request": request,
         "stock_report": stock_report,
         "alerts": alerts,
-        "search_query": search or "" # Pass the search back to UI
+        "search_query": search or "",
+        "stats": stats  # <--- This is what was missing!
     })
 
 @router.get("/export/csv")
