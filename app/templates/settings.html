@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="bg-base-100 rounded-2xl shadow-sm border border-base-300 p-4 sm:p-6 max-w-3xl">
+    <h1 class="text-xl sm:text-2xl font-bold mb-2">Settings</h1>
+    <p class="text-sm text-base-content/70 mb-6">Configuration and system preferences.</p>
+
+    <div class="space-y-4">
+        <div class="p-4 border border-base-300 rounded-lg bg-base-200">
+            <h2 class="font-semibold">Low Stock Threshold</h2>
+            <p class="text-sm text-base-content/70 mt-1">Default low-stock threshold is currently 50 meters.</p>
+        </div>
+
+        <div class="p-4 border border-base-300 rounded-lg bg-base-200">
+            <h2 class="font-semibold">Webhook Processing</h2>
+            <p class="text-sm text-base-content/70 mt-1">AI extraction, duplicate detection, and review queue are enabled.</p>
+        </div>
+
+        <div class="p-4 border border-base-300 rounded-lg bg-base-200">
+            <h2 class="font-semibold">Account</h2>
+            <p class="text-sm text-base-content/70 mt-1">Use the top-right menu to log out securely.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

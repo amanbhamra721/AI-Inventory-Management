@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div>
+        <h1 class="text-xl sm:text-2xl font-bold">Analytics Hub</h1>
+        <p class="text-sm text-base-content/70">Stock health and recent movement.</p>
+    </div>
+    <a href="/export/csv" class="btn btn-outline btn-primary btn-sm rounded-xl">Export CSV</a>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
+    <div class="stats bg-base-100 rounded-2xl shadow-sm border border-base-300 p-2 relative overflow-hidden">
+        <svg xmlns="http://www.w3.org/2000/svg" class="absolute -right-4 -top-4 h-16 w-16 opacity-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V7a2 2 0 00-2-2h-3m-6 0H6a2 2 0 00-2 2v6m16 0v4a2 2 0 01-2 2h-4m-4 0H6a2 2 0 01-2-2v-4m0 0h16" /></svg>
+        <div class="stat">
+            <div class="stat-title">Total Inventory</div>
+            <div class="stat-value text-primary">{{ stats.net_stock | default(0, true) }}</div>
+            <div class="stat-desc">Meters</div>
+        </div>
+    </div>
+
+    <div class="stats bg-base-100 rounded-2xl shadow-sm border border-base-300 p-2 relative overflow-hidden">
+        <svg xmlns="http://www.w3.org/2000/svg" class="absolute -right-4 -top-4 h-16 w-16 opacity-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+        <div class="stat">
+            <div class="stat-title">Total Thaans</div>
+            <div class="stat-value text-secondary">{{ stats.total_thaans | default(0, true) }}</div>
+            <div class="stat-desc">Active units in hand</div>
+        </div>
+    </div>
+
+    <div class="stats bg-base-100 rounded-2xl shadow-sm border border-base-300 p-2 relative overflow-hidden">
+        <svg xmlns="http://www.w3.org/2000/svg" class="absolute -right-4 -top-4 h-16 w-16 opacity-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.66 1.73-3L13.73 4c-.77-1.34-2.69-1.34-3.46 0L3.34 16c-.77 1.34.19 3 1.73 3z" /></svg>
+        <div class="stat">
+            <div class="stat-title">Low Stock Items</div>
+            <div class="stat-value text-error">{{ alerts | length }}</div>
+            <div class="stat-desc">Below threshold</div>
+        </div>
+    </div>
+
+    <div class="stats bg-base-100 rounded-2xl shadow-sm border border-base-300 p-2 relative overflow-hidden">
+        <svg xmlns="http://www.w3.org/2000/svg" class="absolute -right-4 -top-4 h-16 w-16 opacity-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8c-2.21 0-4 .896-4 2s1.79 2 4 2 4 .896 4 2-1.79 2-4 2m0-8V6m0 12v-2" /></svg>
+        <div class="stat">
+            <div class="stat-title">Total Capital Value</div>
+            <div class="stat-value text-accent">{{ stats.total_capital_value | default(0, true) }}</div>
+            <div class="stat-desc">Estimated valuation</div>
+        </div>
+    </div>
+</div>
+
+<div class="space-y-2 mb-5">
+    {% for alert in alerts %}
+    <div class="alert alert-warning shadow-sm rounded-xl">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+        </svg>
+        <span><strong>{{ alert.fabric }}</strong> (Shade: {{ alert.shade_code or 'N/A' }}) is low at {{ alert.current_meters }} meters.</span>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-5 gap-4">
+    <section class="xl:col-span-3 bg-base-100 rounded-2xl shadow-sm border border-base-300 p-4 sm:p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">Recent Transactions</h2>
+            <span class="badge badge-outline">Last 5 entries</span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="table table-zebra">
+                <thead>
+                    <tr>
+                        <th>Fabric</th>
+                        <th>Shade</th>
+                        <th>Type</th>
+                        <th class="text-right">Meters</th>
+                        <th>Date</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tx in recent_transactions | default([], true) %}
+                    <tr>
+                        <td class="font-medium">{{ tx.fabric | default('N/A', true) }}</td>
+                        <td>{{ tx.shade_code | default('N/A', true) }}</td>
+                        <td>
+                            {% if tx.transaction_type == 'INWARD' %}
+                            <span class="badge badge-success badge-sm">Inward</span>
+                            {% else %}
+                            <span class="badge badge-error badge-sm">Outward</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right">{{ tx.meters | default(0, true) }}</td>
+                        <td>{{ tx.created_at if tx.created_at else '-' }}</td>
+                        <td class="text-right">
+                            <a href="/inventory?search={{ tx.fabric | replace(' ', '+') }}" class="btn btn-ghost btn-xs">Quick Edit</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center text-base-content/60 py-6">No recent transactions available.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <aside class="xl:col-span-2 bg-base-100 rounded-2xl shadow-sm border border-base-300 p-4 sm:p-6">
+        <h2 class="text-lg font-semibold mb-4">Quick Actions</h2>
+        <div class="space-y-3">
+            <a href="/export/csv" class="btn btn-primary w-full rounded-xl">Export CSV</a>
+            <a href="/inventory" class="btn btn-outline w-full rounded-xl">Open Inventory</a>
+        </div>
+
+        <div class="divider">Overview</div>
+
+        <div class="space-y-2 text-sm">
+            <p class="flex justify-between"><span class="text-base-content/70">Profiles Tracked</span><strong>{{ profiles | length }}</strong></p>
+            <p class="flex justify-between"><span class="text-base-content/70">Inward Total</span><strong>{{ stats.total_inward | default(0, true) }}</strong></p>
+            <p class="flex justify-between"><span class="text-base-content/70">Outward Total</span><strong>{{ stats.total_outward | default(0, true) }}</strong></p>
+        </div>
+
+    </aside>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
+    <section class="xl:col-span-2 bg-base-100 rounded-2xl shadow-sm border border-base-300 p-4 sm:p-6">
+        <h2 class="text-lg font-semibold mb-4">Fast/Slow Moving (30 days)</h2>
+        {% set fast_slow_rows = fast_slow | default([], true) %}
+        <div class="overflow-x-auto">
+            <table class="table table-zebra">
+                <thead>
+                    <tr>
+                        <th>Fabric</th>
+                        <th>Shade</th>
+                        <th class="text-right">Outward Meters</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in fast_slow_rows[:10] %}
+                    <tr>
+                        <td>{{ row.fabric }}</td>
+                        <td>{{ row.shade_code or 'N/A' }}</td>
+                        <td class="text-right">{{ row.outward_meters | default(0, true) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="3" class="text-center text-base-content/60">No movement data.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="bg-base-100 rounded-2xl shadow-sm border border-base-300 p-4 sm:p-6">
+        <h2 class="text-lg font-semibold mb-4">Recent Activity</h2>
+        <div class="space-y-3 max-h-80 overflow-auto">
+            {% for log in activity_logs | default([], true) %}
+            <div class="p-3 border border-base-300 rounded-lg bg-base-200">
+                <p class="text-sm font-medium">{{ log.action }}</p>
+                <p class="text-xs text-base-content/70">{{ log.performed_by }} - {{ log.timestamp }}</p>
+            </div>
+            {% else %}
+            <p class="text-sm text-base-content/60">No activity logs yet.</p>
+            {% endfor %}
+        </div>
+    </section>
+</div>
+
+<div class="bg-base-100 rounded-2xl shadow-sm border border-base-300 p-4 sm:p-6 mt-4">
+    <h2 class="text-lg font-semibold mb-4">Aging / Non-Moving Stock</h2>
+    {% set aging_rows = aging_report | default([], true) %}
+    <div class="overflow-x-auto">
+        <table class="table table-zebra">
+            <thead>
+                <tr>
+                    <th>Fabric</th>
+                    <th>Shade</th>
+                    <th class="text-right">Current Meters</th>
+                    <th class="text-right">Days Since Movement</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in aging_rows[:10] %}
+                <tr>
+                    <td>{{ row.fabric }}</td>
+                    <td>{{ row.shade_code or 'N/A' }}</td>
+                    <td class="text-right">{{ row.current_meters }}</td>
+                    <td class="text-right">{{ row.days_since_movement }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-center text-base-content/60">No aging data available.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

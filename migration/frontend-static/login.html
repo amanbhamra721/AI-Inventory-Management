@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The Koshak – Login</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+    .login-card { width:100%; max-width:360px; }
+    .login-card h1 { color:#1d4ed8; font-size:28px; margin:0 0 4px; }
+    .login-card p  { color:#94a3b8; font-size:14px; margin:0 0 24px; }
+    .form-group { margin-bottom:16px; }
+    label  { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
+    input  { width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px;
+             font-size:15px; box-sizing:border-box; outline:none; }
+    input:focus { border-color:#1d4ed8; box-shadow:0 0 0 3px #dbeafe; }
+    .btn   { width:100%; padding:12px; margin-top:8px; font-size:15px; font-weight:600; }
+    .error { color:#dc2626; font-size:13px; text-align:center; margin-top:8px; min-height:20px; }
+  </style>
+</head>
+<body>
+  <div class="card login-card">
+    <div style="text-align:center">
+      <h1>The Koshak</h1>
+      <p>Inventory Management System</p>
+    </div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="phone">Phone Number</label>
+        <input id="phone" type="text" placeholder="e.g. 9876543210" autocomplete="tel" required />
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required />
+      </div>
+      <p class="error" id="loginError"></p>
+      <button class="btn" type="submit" id="loginBtn">Login</button>
+    </form>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    // If already logged in, go straight to dashboard
+    if (Auth.isLoggedIn()) {
+      window.location.replace("index.html");
+    }
+
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById("loginBtn");
+      const errEl = document.getElementById("loginError");
+      btn.disabled = true;
+      btn.textContent = "Logging in…";
+      errEl.textContent = "";
+
+      const result = await Auth.login(
+        document.getElementById("phone").value.trim(),
+        document.getElementById("password").value
+      );
+
+      if (result.ok) {
+        window.location.replace("index.html");
+      } else {
+        errEl.textContent = result.error;
+        btn.disabled = false;
+        btn.textContent = "Login";
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="corporate">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>The Koshak ERP</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-base-200 text-base-content min-h-screen">
+    <div class="lg:grid lg:grid-cols-[260px,1fr] min-h-screen">
+        <aside class="hidden lg:flex flex-col bg-base-100 border-r border-base-300">
+            <div class="px-6 py-6 border-b border-base-300">
+                <h1 class="text-xl font-bold tracking-tight">The Koshak</h1>
+                <p class="text-sm text-base-content/60 mt-1">Inventory App</p>
+            </div>
+            <ul class="menu p-4 gap-2">
+                <li><a href="/" class="rounded-xl {% if request.url.path == '/' %}active font-semibold{% endif %}">Dashboard</a></li>
+                <li><a href="/inventory" class="rounded-xl {% if request.url.path == '/inventory' %}active font-semibold{% endif %}">Inventory</a></li>
+                <li><a href="/activity-logs" class="rounded-xl {% if request.url.path == '/activity-logs' %}active font-semibold{% endif %}">Activity Logs</a></li>
+                <li><a href="/settings" class="rounded-xl {% if request.url.path == '/settings' %}active font-semibold{% endif %}">Settings</a></li>
+            </ul>
+            <div class="mt-auto p-4 border-t border-base-300">
+                <a href="/logout" class="btn btn-outline btn-sm w-full">Logout</a>
+            </div>
+        </aside>
+
+        <div class="flex flex-col min-h-screen max-w-screen-md lg:max-w-none mx-auto w-full">
+            <header class="sticky top-0 z-30 bg-base-100/95 backdrop-blur border-b border-base-300 pt-[max(env(safe-area-inset-top),0px)]">
+                <div class="navbar px-4 h-16">
+                    <div class="flex-1">
+                        <h2 class="text-lg font-semibold">The Koshak</h2>
+                    </div>
+                    <div class="flex-none gap-2">
+                        <button class="btn btn-ghost btn-circle relative" aria-label="Notifications">
+                            <span class="absolute top-2 right-2 h-2 w-2 rounded-full bg-error"></span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0a3 3 0 11-6 0h6z" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <main class="flex-1 p-4 sm:p-6 pb-28 lg:pb-6 [padding-bottom:calc(env(safe-area-inset-bottom)+6rem)] lg:[padding-bottom:1.5rem]">
+                {% block content %}{% endblock %}
+            </main>
+
+            <nav class="fixed lg:hidden bottom-0 left-0 right-0 z-40 bg-base-100 border-t border-base-300 pb-[max(env(safe-area-inset-bottom),0px)]">
+                <div class="grid grid-cols-4 gap-1 px-2 py-2 text-xs">
+                    <a href="/" class="btn btn-ghost btn-sm h-12 rounded-xl {% if request.url.path == '/' %}btn-active{% endif %}">Home</a>
+                    <a href="/inventory" class="btn btn-ghost btn-sm h-12 rounded-xl {% if request.url.path == '/inventory' %}btn-active{% endif %}">Inventory</a>
+                    <a href="/activity-logs" class="btn btn-ghost btn-sm h-12 rounded-xl {% if request.url.path == '/activity-logs' %}btn-active{% endif %}">Activity</a>
+                    <a href="/settings" class="btn btn-ghost btn-sm h-12 rounded-xl {% if request.url.path == '/settings' %}btn-active{% endif %}">Settings</a>
+                </div>
+            </nav>
+        </div>
+    </div>
+</body>
+</html>

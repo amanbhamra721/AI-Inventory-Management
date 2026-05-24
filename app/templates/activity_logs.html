@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="bg-base-100 rounded-2xl shadow-sm border border-base-300 p-4 sm:p-6">
+    <div class="mb-5">
+        <h1 class="text-xl sm:text-2xl font-bold">Activity Logs</h1>
+        <p class="text-sm text-base-content/70">System actions and manual changes timeline.</p>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="table table-zebra w-full">
+            <thead>
+                <tr>
+                    <th>Action</th>
+                    <th>Table</th>
+                    <th>Record</th>
+                    <th>User</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td class="font-medium">{{ log.action }}</td>
+                    <td>{{ log.table_name }}</td>
+                    <td>#{{ log.record_id }}</td>
+                    <td>{{ log.performed_by }}</td>
+                    <td>{{ log.timestamp }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-center text-base-content/60 py-6">No activity logs available.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

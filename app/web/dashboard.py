@@ -1,0 +1,201 @@
+from fastapi import APIRouter, Request, Form, Response
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import RedirectResponse, StreamingResponse
+from app.services.db import (
+    get_db_connection,
+    get_stock_status_report,
+    get_inventory_details,
+    get_dashboard_stats,
+    get_recent_transactions,
+    direct_update_inventory_entry,
+    get_activity_logs,
+    get_fast_slow_moving,
+    get_aging_report,
+)
+from app.services.auth import verify_password
+import re
+from typing import Optional
+import io
+import csv
+
+router = APIRouter()
+templates = Jinja2Templates(directory="app/templates")
+
+
+def get_current_user(request: Request):
+    """Checks if the user has a valid session cookie."""
+    user_phone = request.cookies.get("auth_user")
+    if not user_phone:
+        return None
+    return user_phone
+
+
+@router.get("/")
+async def show_index(request: Request, search: Optional[str] = None):
+    user_phone = request.cookies.get("auth_user")
+    if not user_phone:
+        return RedirectResponse(url="/login")
+
+    full_stock_report = get_stock_status_report(user_phone)
+    stock_report = get_stock_status_report(user_phone, search_term=search) if search else full_stock_report
+    alerts = [item for item in stock_report if item['status'] != 'HEALTHY']
+    stats = get_dashboard_stats(user_phone)
+    recent_transactions = get_recent_transactions(user_phone, limit=5)
+    activity_logs = get_activity_logs(user_phone, limit=8)
+    fast_slow = get_fast_slow_moving(user_phone, days=30)
+    aging_report = get_aging_report(user_phone)
+    
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "stock_report": stock_report,
+        "profiles": stock_report,
+        "alerts": alerts,
+        "search_query": search or "",
+        "stats": stats,
+        "recent_transactions": recent_transactions,
+        "activity_logs": activity_logs,
+        "fast_slow": fast_slow,
+        "aging_report": aging_report,
+    })
+
+@router.get("/export/csv")
+async def export_inventory_csv(request: Request):
+    """Generates a downloadable CSV of the current inventory."""
+    user_phone = request.cookies.get("auth_user")
+    if not user_phone:
+        return RedirectResponse(url="/login")
+
+    # Fetch the full, unfiltered report for export
+    stock_report = get_stock_status_report(user_phone)
+
+    # Build the CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write Headers
+    writer.writerow(["Fabric", "Shade Code", "Current Meters", "Current Thaans", "Status"])
+    
+    # Write Data
+    for item in stock_report:
+        writer.writerow([
+            item['fabric'], 
+            item['shade_code'], 
+            item['current_meters'], 
+            item['current_thaans'], 
+            item['status'].replace('_', ' ')
+        ])
+
+    output.seek(0)
+    
+    # Return as a downloadable file
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=live_inventory_report.csv"}
+    )
+
+@router.get("/inventory")
+async def show_inventory(request: Request, search: Optional[str] = None, type: Optional[str] = None):
+    phone = request.cookies.get("auth_user")
+    if not phone:
+        return RedirectResponse(url="/login")
+
+    tx_type = type.upper() if type else None
+    items = get_inventory_details(sender_phone=phone, search_term=search, tx_type=tx_type)
+    
+    return templates.TemplateResponse("inventory.html", {
+        "request": request, 
+        "items": items,
+        "search_query": search or "",
+        "selected_type": tx_type or "",
+    })
+
+
+@router.post("/inventory/edit-direct")
+async def update_inventory_direct(
+    request: Request,
+    entry_id: int = Form(...),
+    fabric: str = Form(...),
+    shade_code: str = Form(""),
+    bale_no: str = Form(""),
+    transaction_type: str = Form(...),
+    meters: float = Form(...),
+    thaans: int = Form(...),
+    unit_price: float = Form(0),
+):
+    phone = request.cookies.get("auth_user")
+    if not phone:
+        return RedirectResponse(url="/login", status_code=303)
+
+    payload = {
+        "fabric": fabric,
+        "shade_code": shade_code or None,
+        "bale_no": bale_no or None,
+        "transaction_type": transaction_type,
+        "meters": meters,
+        "thaans": thaans,
+        "unit_price": unit_price,
+    }
+    direct_update_inventory_entry(entry_id=entry_id, sender_phone=phone, changed_by=phone, payload=payload)
+    return RedirectResponse(url="/inventory", status_code=303)
+
+
+@router.get("/activity-logs")
+async def activity_logs_page(request: Request):
+    phone = request.cookies.get("auth_user")
+    if not phone:
+        return RedirectResponse(url="/login")
+    logs = get_activity_logs(phone, limit=100)
+    return templates.TemplateResponse("activity_logs.html", {"request": request, "logs": logs})
+
+
+@router.get("/settings")
+async def settings_page(request: Request):
+    phone = request.cookies.get("auth_user")
+    if not phone:
+        return RedirectResponse(url="/login")
+    return templates.TemplateResponse("settings.html", {"request": request})
+
+@router.get("/login")
+async def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+@router.post("/login")
+async def handle_login(
+    request: Request,
+    response: Response,
+    phone: str = Form(...),
+    password: str = Form(...)
+):
+    # --- 1. INPUT NORMALIZATION ---
+    # Strip out any spaces, dashes, or + signs the user might have accidentally typed
+    clean_phone = re.sub(r'\D', '', phone) 
+    
+    # If the user typed a 10-digit number, automatically prepend the '91' country code
+    if len(clean_phone) == 10:
+        clean_phone = f"91{clean_phone}"
+
+    # --- 2. DATABASE LOOKUP ---
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        # We now use 'clean_phone' instead of the raw 'phone' input
+        cur.execute("SELECT phone_number, hashed_password, business_type FROM users WHERE phone_number = %s", (clean_phone,))
+        user = cur.fetchone()
+        
+        if user and verify_password(password, user['hashed_password']):
+            redirect = RedirectResponse(url="/", status_code=303)
+            # Store the cleaned phone number in the cookie
+            redirect.set_cookie(key="auth_user", value=clean_phone, httponly=True)
+            return redirect
+        
+        return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid phone number or password."})
+    finally:
+        cur.close()
+        conn.close()
+
+@router.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/login")
+    response.delete_cookie("auth_user")
+    return response

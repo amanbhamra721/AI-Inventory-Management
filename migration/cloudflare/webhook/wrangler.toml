@@ -1,0 +1,9 @@
+name = "koshak-webhook-edge"
+main = "worker.js"
+compatibility_date = "2026-05-22"
+
+[vars]
+# Set these with `wrangler secret put` in production.
+VERIFY_TOKEN = "replace-me"
+PROCESSOR_URL = "https://your-processor-domain.com/webhook/process"
+PROCESSOR_SHARED_SECRET = "replace-me"
