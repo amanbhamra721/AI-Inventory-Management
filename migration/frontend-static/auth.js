@@ -14,7 +14,13 @@
 const Auth = (() => {
   const TOKEN_KEY = "koshak_token";
   const PHONE_KEY = "koshak_phone";
-  const base = () => window.APP_CONFIG?.apiBaseUrl || "";
+  const base = () => {
+    let api = window.APP_CONFIG?.apiBaseUrl || "";
+    if (window.location.protocol === "https:" && api.startsWith("http://")) {
+      api = api.replace(/^http:\/\//i, "https://");
+    }
+    return api;
+  };
 
   function save(token, phone) {
     localStorage.setItem(TOKEN_KEY, token);
