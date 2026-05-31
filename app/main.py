@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import os
-from app.api.webhook import router as whatsapp_router
 from app.web.dashboard import router as web_router
 from app.api.auth import router as auth_router
 from app.api.public_data import router as data_router
@@ -24,7 +23,6 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # Mount your routers
-app.include_router(whatsapp_router, prefix="/api")  # Now at api.thekoshak.com/api/webhook
 app.include_router(web_router)                       # Now at api.thekoshak.com/
 app.include_router(auth_router, prefix="/api")       # POST /api/auth/login  — token-based login
 app.include_router(data_router, prefix="/api")       # GET  /api/data/stock|stats|ledger|export/csv
