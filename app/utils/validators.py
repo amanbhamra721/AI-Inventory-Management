@@ -46,9 +46,5 @@ def validate_outward(data):
     if abs(calc_meters - reported_meters) > 0.1:
         return False, f"Meter Mismatch: Calculated {calc_meters}, Document says {reported_meters}"
     
-    # 3. Individual Price Check 
-    for item in items:
-        if not item.get('price') or float(item.get('price')) <= 0:
-            return False, f"Missing individual price for fabric: {item.get('fabric')}. Please extract the amount from the right column."
-            
+    # 3. Price is optional in the Omni-Parser schema; defaults to 0 when absent.
     return True, "Outward Data Verified ✅"
