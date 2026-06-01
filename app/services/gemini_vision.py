@@ -5,6 +5,9 @@ import os
 import re
 import urllib.error
 import urllib.request
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def _build_image_part(image_path: str):
