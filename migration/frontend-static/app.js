@@ -6,7 +6,10 @@ const id = (x) => document.getElementById(x);
 
 function setText(idValue, value) {
   const el = id(idValue);
-  if (el) el.textContent = value;
+  if (el) {
+    el.textContent = value;
+    el.classList.remove("skeleton");
+  }
 }
 
 function statusBadge(status) {

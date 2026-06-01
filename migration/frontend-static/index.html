@@ -50,28 +50,28 @@
           <div class="stats bg-base-100 rounded-2xl shadow-sm border border-base-300 p-2">
             <div class="stat">
               <div class="stat-title">Total Inventory</div>
-              <div class="stat-value text-primary" id="netStock">0</div>
+              <div class="stat-value text-primary skeleton h-12 w-24" id="netStock"></div>
               <div class="stat-desc">Meters</div>
             </div>
           </div>
           <div class="stats bg-base-100 rounded-2xl shadow-sm border border-base-300 p-2">
             <div class="stat">
               <div class="stat-title">Total Thaans</div>
-              <div class="stat-value text-secondary" id="totalThaans">0</div>
+              <div class="stat-value text-secondary skeleton h-12 w-24" id="totalThaans"></div>
               <div class="stat-desc">Active units in hand</div>
             </div>
           </div>
           <div class="stats bg-base-100 rounded-2xl shadow-sm border border-base-300 p-2">
             <div class="stat">
               <div class="stat-title">Low Stock Items</div>
-              <div class="stat-value text-error" id="lowStock">0</div>
+              <div class="stat-value text-error skeleton h-12 w-24" id="lowStock"></div>
               <div class="stat-desc">Below threshold</div>
             </div>
           </div>
           <div class="stats bg-base-100 rounded-2xl shadow-sm border border-base-300 p-2">
             <div class="stat">
               <div class="stat-title">Total Capital Value</div>
-              <div class="stat-value text-accent" id="totalCapital">0</div>
+              <div class="stat-value text-accent skeleton h-12 w-24" id="totalCapital"></div>
               <div class="stat-desc">Estimated valuation</div>
             </div>
           </div>
@@ -88,7 +88,9 @@
                 <thead>
                   <tr><th>Fabric</th><th>Shade</th><th>Type</th><th class="text-right">Meters</th><th>Date</th></tr>
                 </thead>
-                <tbody id="recentBody"></tbody>
+                <tbody id="recentBody">
+                  <tr><td colspan="5" class="text-center py-6"><span class="loading loading-spinner loading-sm"></span></td></tr>
+                </tbody>
               </table>
             </div>
           </section>
@@ -114,11 +116,15 @@
             <div class="overflow-x-auto">
               <table class="table table-zebra">
                 <thead><tr><th>Fabric</th><th>Shade</th><th class="text-right">Outward Meters</th></tr></thead>
-                <tbody id="fastSlowBody"></tbody>
+                <tbody id="fastSlowBody">
+                  <tr><td colspan="3" class="text-center py-6"><span class="loading loading-spinner loading-sm"></span></td></tr>
+                </tbody>
               </table>
             </div>
           </section>
-          <section class="bg-base-100 rounded-2xl shadow-sm border border-base-300 p-4 sm:p-6">
+          <section class="bg-base-100 rounded-2xl shadow-sm border border-ba
+              <div class="text-center py-6"><span class="loading loading-spinner loading-sm"></span></div>
+            se-300 p-4 sm:p-6">
             <h2 class="text-lg font-semibold mb-4">Recent Activity</h2>
             <div class="space-y-3 max-h-80 overflow-auto" id="activityList"></div>
           </section>
@@ -127,7 +133,9 @@
         <div class="bg-base-100 rounded-2xl shadow-sm border border-base-300 p-4 sm:p-6 mt-4">
           <h2 class="text-lg font-semibold mb-4">Aging / Non-Moving Stock</h2>
           <div class="overflow-x-auto">
-            <table class="table table-zebra">
+            <table class="table tabl
+                <tr><td colspan="4" class="text-center py-6"><span class="loading loading-spinner loading-sm"></span></td></tr>
+              e-zebra">
               <thead><tr><th>Fabric</th><th>Shade</th><th class="text-right">Current Meters</th><th class="text-right">Days Since Movement</th></tr></thead>
               <tbody id="agingBody"></tbody>
             </table>

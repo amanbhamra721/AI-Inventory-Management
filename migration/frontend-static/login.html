@@ -46,7 +46,9 @@
           </div>
 
           <p class="text-error text-sm min-h-5" id="loginError"></p>
-          <button type="submit" class="btn btn-primary w-full" id="loginBtn">Sign In</button>
+          <button type="submit" class="btn btn-primary w-full" id="loginBtn">
+            <span id="btnText">Sign In</span>
+          </button>
         </form>
       </div>
     </section>
@@ -94,9 +96,10 @@
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const btn = document.getElementById("loginBtn");
+      const btnText = document.getElementById("btnText");
       const errEl = document.getElementById("loginError");
       btn.disabled = true;
-      btn.textContent = "Signing in...";
+      btnText.innerHTML = '<span class="loading loading-spinner loading-sm mr-2"></span>Signing in...';
       errEl.textContent = "";
 
       const result = await Auth.login(
@@ -109,7 +112,7 @@
       } else {
         errEl.textContent = result.error;
         btn.disabled = false;
-        btn.textContent = "Sign In";
+        btnText.textContent = "Sign In";
       }
     });
   </script>
