@@ -103,9 +103,9 @@
             </div>
             <div class="divider">Overview</div>
             <div class="space-y-2 text-sm">
-              <p class="flex justify-between"><span class="text-base-content/70">Profiles Tracked</span><strong id="profilesCount">0</strong></p>
-              <p class="flex justify-between"><span class="text-base-content/70">Inward Total</span><strong id="inwardTotal">0</strong></p>
-              <p class="flex justify-between"><span class="text-base-content/70">Outward Total</span><strong id="outwardTotal">0</strong></p>
+              <p class="flex justify-between"><span class="text-base-content/70">Profiles Tracked</span><strong id="profilesCount" class="skeleton w-12 h-5"></strong></p>
+              <p class="flex justify-between"><span class="text-base-content/70">Inward Total</span><strong id="inwardTotal" class="skeleton w-12 h-5"></strong></p>
+              <p class="flex justify-between"><span class="text-base-content/70">Outward Total</span><strong id="outwardTotal" class="skeleton w-12 h-5"></strong></p>
             </div>
           </aside>
         </div>
@@ -122,11 +122,11 @@
               </table>
             </div>
           </section>
-          <section class="bg-base-100 rounded-2xl shadow-sm border border-ba
-              <div class="text-center py-6"><span class="loading loading-spinner loading-sm"></span></div>
-            se-300 p-4 sm:p-6">
+          <section class="bg-base-100 rounded-2xl shadow-sm border border-base-300 p-4 sm:p-6">
             <h2 class="text-lg font-semibold mb-4">Recent Activity</h2>
-            <div class="space-y-3 max-h-80 overflow-auto" id="activityList"></div>
+            <div class="space-y-3 max-h-80 overflow-auto" id="activityList">
+              <div class="text-center py-6"><span class="loading loading-spinner loading-sm"></span></div>
+            </div>
           </section>
         </div>
 
