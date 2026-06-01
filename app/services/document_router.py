@@ -1,3 +1,4 @@
+import json
 import time
 from app.services.gemini_vision import call_gemini, extract_json
 from app.utils.validators import validate_inward, validate_outward
@@ -28,6 +29,78 @@ def classify_document(image_path):
         return "OUTWARD"
 
     return "UNKNOWN"
+
+
+def _repair_failed_payload(doc_type: str, ocr_text: str, failed_data: dict, validation_message: str):
+    """One final correction pass that repairs JSON against validator feedback."""
+    repair_prompt = f"""
+    You are repairing a previously extracted {doc_type} JSON payload for a textile receipt.
+    The payload failed validation with this exact error:
+    {validation_message}
+
+    Rules:
+    1. Keep the same JSON schema and return ONLY valid JSON.
+    2. Preserve metadata if already correct.
+    3. Fix ONLY line-item mapping and totals consistency issues.
+    4. Items must include only true fabric rows; never include headers/totals.
+    5. Ensure sum(items.meters) == summary.total_meters and sum(items.thaans) == summary.total_thaans.
+    6. If uncertain for optional fields (shade/bale/price), use null or 0 for price.
+
+    RAW OCR:
+    {ocr_text}
+
+    FAILED JSON:
+    {json.dumps(failed_data, ensure_ascii=True)}
+    """
+
+    repaired_text, err = call_gemini(repair_prompt)
+    if err:
+        return None
+
+    repaired_data = extract_json(repaired_text) if repaired_text else None
+    if not repaired_data:
+        return None
+
+    return repaired_data
+
+
+def _apply_minor_reconciliation(data: dict, meter_tolerance: float = 1.0, thaan_tolerance: float = 1.0):
+    """Adjust small residual numeric drift by updating the last line item to match summary totals."""
+    if not isinstance(data, dict):
+        return data
+
+    items = data.get("items") or []
+    summary = data.get("summary") or {}
+    if not items:
+        return data
+
+    try:
+        target_meters = float(summary.get("total_meters") or 0)
+        target_thaans = float(summary.get("total_thaans") or 0)
+    except Exception:
+        return data
+
+    calc_meters = sum(float(item.get("meters") or 0) for item in items)
+    calc_thaans = sum(float(item.get("thaans") or 0) for item in items)
+
+    meter_diff = round(target_meters - calc_meters, 2)
+    thaan_diff = round(target_thaans - calc_thaans, 2)
+
+    if abs(meter_diff) > meter_tolerance or abs(thaan_diff) > thaan_tolerance:
+        return data
+
+    corrected = dict(data)
+    corrected_items = [dict(item) for item in items]
+    last_item = corrected_items[-1]
+
+    last_item["meters"] = round(float(last_item.get("meters") or 0) + meter_diff, 2)
+    last_item["thaans"] = round(float(last_item.get("thaans") or 0) + thaan_diff, 2)
+
+    if float(last_item["meters"]) < 0 or float(last_item["thaans"]) < 0:
+        return data
+
+    corrected["items"] = corrected_items
+    return corrected
 
 
 def run_pipeline(image_path, doc_type, attempt=1, max_retries=3, retry_hint=None):
@@ -121,6 +194,8 @@ def run_pipeline(image_path, doc_type, attempt=1, max_retries=3, retry_hint=None
         print("❌ Could not parse JSON payload from model response.")
         return None
 
+    data = _apply_minor_reconciliation(data)
+
     # Step 3: Validation
     is_valid, message = validator(data)
 
@@ -132,6 +207,15 @@ def run_pipeline(image_path, doc_type, attempt=1, max_retries=3, retry_hint=None
         print(f"⚠️ Validation Failed: {message}")
         print("🔄 Self-Correction Triggered...")
         return run_pipeline(image_path, doc_type, attempt + 1, max_retries, retry_hint=message)
+
+    repaired = _repair_failed_payload(doc_type, ocr_text, data, message)
+    if repaired:
+        repaired = _apply_minor_reconciliation(repaired)
+        repaired_ok, repaired_message = validator(repaired)
+        if repaired_ok:
+            print(f"✅ Success after final repair pass! {repaired_message}")
+            return repaired
+        print(f"⚠️ Final repair pass still failed: {repaired_message}")
 
     print(f"🛑 Critical Failure after {max_retries} attempts: {message}")
     return None
