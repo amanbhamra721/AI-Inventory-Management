@@ -32,7 +32,7 @@ def call_gemini(prompt: str, image_path: str | None = None):
     if not api_key:
         return None, "GEMINI_API_KEY is not set"
 
-    model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     parts = [{"text": prompt}]
