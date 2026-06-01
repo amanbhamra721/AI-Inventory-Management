@@ -1202,7 +1202,13 @@ def direct_update_inventory_entry(entry_id: int, sender_phone: str, changed_by: 
             INSERT INTO inventory_change_logs (entry_id, changed_by, change_type, old_data, new_data, reason)
             VALUES (%s, %s, 'DIRECT_UPDATE', %s, %s, %s)
             """,
-            (entry_id, changed_by, json.dumps(old_row), json.dumps(updated), "Direct edit"),
+            (
+                entry_id,
+                changed_by,
+                json.dumps(old_row, default=str),
+                json.dumps(updated, default=str),
+                "Direct edit",
+            ),
         )
         conn.commit()
         log_audit("DIRECT_EDIT", "inventory_ledger", entry_id, changed_by, {"entry_id": entry_id})
