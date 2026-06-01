@@ -77,10 +77,11 @@
                   <th class="text-right">Meters</th>
                   <th class="text-right">Thaans</th>
                   <th>Date</th>
+                  <th class="text-center">Actions</th>
                 </tr>
               </thead>
               <tbody id="inventoryBody">
-                <tr><td colspan="10" class="text-center py-6"><span class="loading loading-spinner loading-sm"></span></td></tr>
+                <tr><td colspan="11" class="text-center py-6"><span class="loading loading-spinner loading-sm"></span></td></tr>
               </tbody>
             </table>
           </div>
@@ -95,6 +96,31 @@
       </nav>
     </div>
   </div>
+
+  <dialog id="editModal" class="modal">
+    <div class="modal-box max-w-md">
+      <h3 class="font-bold text-lg mb-3">Edit Inventory Row</h3>
+      <form id="editForm" class="space-y-2">
+        <input type="hidden" id="editEntryId" />
+        <input class="input input-bordered input-sm w-full" id="editFabric" placeholder="Fabric" required />
+        <input class="input input-bordered input-sm w-full" id="editShade" placeholder="Shade Code" />
+        <input class="input input-bordered input-sm w-full" id="editBale" placeholder="Bale Number" />
+        <select class="select select-bordered select-sm w-full" id="editType">
+          <option value="INWARD">INWARD</option>
+          <option value="OUTWARD">OUTWARD</option>
+        </select>
+        <input class="input input-bordered input-sm w-full" type="number" step="0.01" id="editMeters" placeholder="Meters" required />
+        <input class="input input-bordered input-sm w-full" type="number" id="editThaans" placeholder="Thaans" required />
+        <input class="input input-bordered input-sm w-full" type="number" step="0.01" id="editUnitPrice" placeholder="Unit Price" />
+        <p id="editError" class="text-error text-xs min-h-4"></p>
+        <div class="modal-action mt-2">
+          <button type="button" class="btn btn-ghost btn-sm" id="cancelEditBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
+        </div>
+      </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
 
   <script src="config.js?v=20260602"></script>
   <script src="auth.js?v=20260602"></script>
@@ -113,7 +139,7 @@
     function renderRows(rows) {
       const body = document.getElementById("inventoryBody");
       if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="10" class="text-center text-base-content/60 py-6">No inventory records found.</td></tr>';
+        body.innerHTML = '<tr><td colspan="11" class="text-center text-base-content/60 py-6">No inventory records found.</td></tr>';
         return;
       }
       body.innerHTML = rows.map((item) => `
@@ -128,8 +154,64 @@
           <td class="text-right font-semibold">${Number(item.meters || 0).toFixed(2)}</td>
           <td class="text-right font-semibold">${Number(item.thaans || 0)}</td>
           <td>${fmtDate(item.created_at)}</td>
+          <td class="text-center">
+            <button class="btn btn-ghost btn-xs rounded-lg" data-edit-id="${item.id}" title="Edit" aria-label="Edit row">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+          </td>
         </tr>
       `).join("");
+
+      body.querySelectorAll("[data-edit-id]").forEach((btn) => {
+        btn.addEventListener("click", () => openEditModal(Number(btn.getAttribute("data-edit-id"))));
+      });
+    }
+
+    function openEditModal(entryId) {
+      const row = allRows.find((r) => Number(r.id) === Number(entryId));
+      if (!row) return;
+      document.getElementById("editEntryId").value = row.id;
+      document.getElementById("editFabric").value = row.fabric || "";
+      document.getElementById("editShade").value = row.shade_code || "";
+      document.getElementById("editBale").value = row.bale_no || "";
+      document.getElementById("editType").value = row.transaction_type || "INWARD";
+      document.getElementById("editMeters").value = Number(row.meters || 0);
+      document.getElementById("editThaans").value = Number(row.thaans || 0);
+      document.getElementById("editUnitPrice").value = Number(row.unit_price || 0);
+      document.getElementById("editError").textContent = "";
+      document.getElementById("editModal").showModal();
+    }
+
+    async function saveEdit(e) {
+      e.preventDefault();
+      const payload = {
+        entry_id: Number(document.getElementById("editEntryId").value),
+        fabric: document.getElementById("editFabric").value.trim(),
+        shade_code: document.getElementById("editShade").value.trim() || null,
+        bale_no: document.getElementById("editBale").value.trim() || null,
+        transaction_type: document.getElementById("editType").value,
+        meters: Number(document.getElementById("editMeters").value || 0),
+        thaans: Number(document.getElementById("editThaans").value || 0),
+        unit_price: Number(document.getElementById("editUnitPrice").value || 0),
+      };
+
+      const errEl = document.getElementById("editError");
+      errEl.textContent = "";
+      const resp = await Auth.apiFetch("/api/data/ledger/edit", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp) return;
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        errEl.textContent = data.detail || "Failed to save changes.";
+        return;
+      }
+      document.getElementById("editModal").close();
+      await loadLedger();
     }
 
     function rebuildBrandFilterOptions(rows) {
@@ -175,6 +257,8 @@
     document.getElementById("partyFilter").addEventListener("keydown", (e) => {
       if (e.key === "Enter") applyFilter();
     });
+    document.getElementById("cancelEditBtn").addEventListener("click", () => document.getElementById("editModal").close());
+    document.getElementById("editForm").addEventListener("submit", saveEdit);
 
     loadLedger();
   </script>

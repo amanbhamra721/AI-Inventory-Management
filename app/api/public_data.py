@@ -1,12 +1,24 @@
 import io
 import csv
 from typing import Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
-from app.services.db import get_stock_status_report, get_inventory_details, get_db_connection
+from app.services.db import get_stock_status_report, get_inventory_details, get_db_connection, direct_update_inventory_entry
 from app.services.jwt_auth import get_current_phone
 
 router = APIRouter()
+
+
+class LedgerEditRequest(BaseModel):
+    entry_id: int
+    fabric: str
+    shade_code: Optional[str] = None
+    bale_no: Optional[str] = None
+    transaction_type: str
+    meters: float
+    thaans: int
+    unit_price: float = 0.0
 
 
 @router.get("/data/stats")
@@ -65,6 +77,7 @@ def api_ledger(
     result = []
     for row in rows:
         result.append({
+            "id":               row["id"],
             "fabric":           row["fabric"],
             "shade_code":       row["shade_code"],
             "bale_no":          row["bale_no"],
@@ -74,9 +87,37 @@ def api_ledger(
             "transaction_type": row["transaction_type"],
             "meters":           float(row["meters"] or 0),
             "thaans":           int(row["thaans"] or 0),
+            "unit_price":       float(row.get("unit_price") or 0),
             "created_at":       row["created_at"].isoformat() if row.get("created_at") else None,
         })
     return result
+
+
+@router.post("/data/ledger/edit")
+def api_ledger_edit(body: LedgerEditRequest, phone: str = Depends(get_current_phone)):
+    tx_type = (body.transaction_type or "").upper()
+    if tx_type not in {"INWARD", "OUTWARD"}:
+        raise HTTPException(status_code=400, detail="transaction_type must be INWARD or OUTWARD")
+
+    payload = {
+        "fabric": body.fabric,
+        "shade_code": body.shade_code,
+        "bale_no": body.bale_no,
+        "transaction_type": tx_type,
+        "meters": body.meters,
+        "thaans": body.thaans,
+        "unit_price": body.unit_price,
+    }
+    ok, message = direct_update_inventory_entry(
+        entry_id=body.entry_id,
+        sender_phone=phone,
+        changed_by=phone,
+        payload=payload,
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail=message)
+
+    return {"ok": True, "message": message}
 
 
 @router.get("/data/export/csv")
