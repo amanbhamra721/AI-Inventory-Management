@@ -1,105 +1,21 @@
-// Auth guard — redirect immediately if not logged in
 if (!Auth.isLoggedIn()) {
   window.location.replace("login.html");
 }
 
-// ── DOM refs ──────────────────────────────────────────────────────────────
-const netStockEl    = document.getElementById("netStock");
-const totalInwardEl = document.getElementById("totalInward");
-const totalOutwardEl= document.getElementById("totalOutward");
-const alertsEl      = document.getElementById("alerts");
-const stockListEl   = document.getElementById("stockList");
-const itemCountEl   = document.getElementById("itemCount");
-const searchInput   = document.getElementById("searchInput");
-const searchBtn     = document.getElementById("searchBtn");
-const clearBtn      = document.getElementById("clearBtn");
-const exportCsvBtn  = document.getElementById("exportCsvBtn");
-const logoutBtn     = document.getElementById("logoutBtn");
+const id = (x) => document.getElementById(x);
 
-// ── Helpers ───────────────────────────────────────────────────────────────
+function setText(idValue, value) {
+  const el = id(idValue);
+  if (el) el.textContent = value;
+}
+
 function statusBadge(status) {
-  if (status === "OUT_OF_STOCK") return `<span class="badge badge-sm bg-red-600 text-white border-none text-[9px] uppercase tracking-wider font-bold">Out of Stock</span>`;
-  if (status === "LOW_STOCK")    return `<span class="badge badge-sm bg-orange-400 text-white border-none text-[9px] uppercase tracking-wider font-bold">Low Stock</span>`;
-  return "";
+  if (status === "OUT_OF_STOCK") return '<span class="badge badge-error badge-sm">Out of Stock</span>';
+  if (status === "LOW_STOCK") return '<span class="badge badge-warning badge-sm">Low Stock</span>';
+  return '<span class="badge badge-success badge-sm">Healthy</span>';
 }
 
-function meterColor(meters) {
-  return meters < 50 ? "text-red-500" : "text-slate-700";
-}
-
-// ── Render ────────────────────────────────────────────────────────────────
-function renderAlerts(items) {
-  const low = items.filter(i => i.status !== "HEALTHY");
-  if (!low.length) { alertsEl.innerHTML = ""; return; }
-  alertsEl.innerHTML = `
-    <div class="mb-8">
-      <h3 class="font-bold text-red-600 mb-3 text-sm">⚠️ Critical Stock Alerts</h3>
-      <div class="space-y-3">
-        ${low.map(a => `
-          <div class="bg-red-50 p-4 rounded-xl shadow-sm border border-red-200 flex justify-between items-center">
-            <div>
-              <p class="font-bold text-red-800 text-sm">${a.fabric}</p>
-              <span class="text-[10px] bg-red-100 px-2 py-0.5 rounded font-medium text-red-600 border border-red-200">
-                Shade: ${a.shade_code || "N/A"}
-              </span>
-            </div>
-            <div class="text-right">
-              <p class="text-xl font-bold text-red-600">${a.current_meters}</p>
-              <p class="text-[9px] text-red-400 font-bold uppercase">Meters Left</p>
-              ${statusBadge(a.status)}
-            </div>
-          </div>`).join("")}
-      </div>
-    </div>`;
-}
-
-function renderStock(items) {
-  itemCountEl.textContent = `${items.length} Items`;
-  if (!items.length) {
-    stockListEl.innerHTML = `<div class="text-center py-8 text-slate-400 text-sm">No stock profiles found.</div>`;
-    return;
-  }
-  stockListEl.innerHTML = items.map(item => `
-    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center">
-      <div>
-        <p class="font-bold text-slate-800 text-sm">${item.fabric || "Unknown Fabric"}</p>
-        <div class="flex gap-2 mt-1.5">
-          <span class="text-[9px] bg-slate-100 px-2 py-0.5 rounded font-medium text-slate-500 border border-slate-200">
-            Shade: ${item.shade_code || "N/A"}
-          </span>
-        </div>
-      </div>
-      <div class="text-right">
-        <p class="text-xl font-bold ${meterColor(item.current_meters)}">${item.current_meters}</p>
-        <p class="text-[9px] text-slate-400 font-bold uppercase">Meters</p>
-        ${statusBadge(item.status)}
-      </div>
-    </div>`).join("");
-}
-
-// ── Data fetching ─────────────────────────────────────────────────────────
-async function loadStats() {
-  const resp = await Auth.apiFetch("/api/data/stats");
-  if (!resp) return;
-  const d = await resp.json();
-  netStockEl.textContent    = d.net_stock;
-  totalInwardEl.textContent = d.total_inward;
-  totalOutwardEl.textContent= d.total_outward;
-}
-
-async function loadStock(search = "") {
-  const query = search ? `?search=${encodeURIComponent(search)}` : "";
-  const resp = await Auth.apiFetch(`/api/data/stock${query}`);
-  if (!resp) return;
-  const items = await resp.json();
-  renderAlerts(items);
-  renderStock(items);
-  clearBtn.classList.toggle("hidden", !search);
-}
-
-// ── CSV export (downloads with token auth) ────────────────────────────────
-exportCsvBtn.addEventListener("click", async (e) => {
-  e.preventDefault();
+async function exportCsv() {
   const resp = await Auth.apiFetch("/api/data/export/csv");
   if (!resp) return;
   const blob = await resp.blob();
@@ -109,16 +25,139 @@ exportCsvBtn.addEventListener("click", async (e) => {
   a.download = "live_inventory_report.csv";
   a.click();
   URL.revokeObjectURL(url);
-});
+}
 
-// ── Search ────────────────────────────────────────────────────────────────
-searchBtn.addEventListener("click", () => loadStock(searchInput.value.trim()));
-searchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") loadStock(searchInput.value.trim()); });
-clearBtn.addEventListener("click", () => { searchInput.value = ""; loadStock(); });
+function wireButtons() {
+  ["logoutBtnDesktop", "logoutBtnMobile"].forEach((btnId) => {
+    const btn = id(btnId);
+    if (btn) btn.addEventListener("click", () => Auth.logout());
+  });
 
-// ── Logout ────────────────────────────────────────────────────────────────
-logoutBtn.addEventListener("click", () => Auth.logout());
+  ["exportCsvBtnTop", "exportCsvBtnSide"].forEach((btnId) => {
+    const btn = id(btnId);
+    if (btn) btn.addEventListener("click", exportCsv);
+  });
+}
 
-// ── Boot ──────────────────────────────────────────────────────────────────
-loadStats();
-loadStock();
+async function loadDashboard() {
+  const [statsResp, stockResp, ledgerResp] = await Promise.all([
+    Auth.apiFetch("/api/data/stats"),
+    Auth.apiFetch("/api/data/stock"),
+    Auth.apiFetch("/api/data/ledger"),
+  ]);
+
+  if (!statsResp || !stockResp || !ledgerResp) return;
+
+  const stats = await statsResp.json();
+  const stock = await stockResp.json();
+  const ledger = await ledgerResp.json();
+
+  setText("netStock", stats.net_stock ?? 0);
+  setText("totalThaans", stats.total_thaans ?? 0);
+  setText("inwardTotal", stats.total_inward ?? 0);
+  setText("outwardTotal", stats.total_outward ?? 0);
+
+  const low = stock.filter((x) => x.status && x.status !== "HEALTHY");
+  setText("lowStock", low.length);
+  setText("profilesCount", stock.length);
+
+  const estCapital = ledger.reduce((acc, row) => acc + Math.max(0, Number(row.meters || 0) * Number(row.unit_price || 0)), 0);
+  setText("totalCapital", estCapital.toFixed(2));
+
+  const alerts = id("alertsContainer");
+  if (alerts) {
+    if (!low.length) {
+      alerts.innerHTML = "";
+    } else {
+      alerts.innerHTML = low.map((a) => `
+        <div class="alert alert-warning shadow-sm rounded-xl">
+          <span><strong>${a.fabric}</strong> (Shade: ${a.shade_code || "N/A"}) is low at ${a.current_meters} meters.</span>
+        </div>
+      `).join("");
+    }
+  }
+
+  const recentBody = id("recentBody");
+  if (recentBody) {
+    const recent = [...ledger].slice(0, 5);
+    recentBody.innerHTML = recent.length
+      ? recent.map((tx) => `
+          <tr>
+            <td class="font-medium">${tx.fabric || "N/A"}</td>
+            <td>${tx.shade_code || "N/A"}</td>
+            <td>${tx.transaction_type === "INWARD" ? '<span class="badge badge-success badge-sm">Inward</span>' : '<span class="badge badge-error badge-sm">Outward</span>'}</td>
+            <td class="text-right">${Number(tx.meters || 0).toFixed(2)}</td>
+            <td>${tx.created_at || "-"}</td>
+          </tr>
+        `).join("")
+      : '<tr><td colspan="5" class="text-center text-base-content/60 py-6">No recent transactions available.</td></tr>';
+  }
+
+  const grouped = {};
+  ledger.forEach((row) => {
+    if (row.transaction_type !== "OUTWARD") return;
+    const key = `${row.fabric || "N/A"}|||${row.shade_code || "N/A"}`;
+    grouped[key] = (grouped[key] || 0) + Number(row.meters || 0);
+  });
+  const topFastSlow = Object.entries(grouped)
+    .map(([key, outward]) => {
+      const [fabric, shade] = key.split("|||");
+      return { fabric, shade, outward };
+    })
+    .sort((a, b) => b.outward - a.outward)
+    .slice(0, 10);
+
+  const fastSlowBody = id("fastSlowBody");
+  if (fastSlowBody) {
+    fastSlowBody.innerHTML = topFastSlow.length
+      ? topFastSlow.map((row) => `<tr><td>${row.fabric}</td><td>${row.shade || "N/A"}</td><td class="text-right">${row.outward.toFixed(2)}</td></tr>`).join("")
+      : '<tr><td colspan="3" class="text-center text-base-content/60">No movement data.</td></tr>';
+  }
+
+  const byKey = {};
+  ledger.forEach((row) => {
+    const key = `${row.fabric || "N/A"}|||${row.shade_code || "N/A"}`;
+    if (!byKey[key] || (row.created_at && row.created_at > byKey[key])) {
+      byKey[key] = row.created_at;
+    }
+  });
+  const now = new Date();
+  const aging = Object.entries(byKey)
+    .map(([key, dateStr]) => {
+      const [fabric, shade] = key.split("|||");
+      const last = dateStr ? new Date(dateStr) : now;
+      const days = Math.max(0, Math.floor((now - last) / (1000 * 60 * 60 * 24)));
+      const stockItem = stock.find((s) => (s.fabric || "N/A") === fabric && (s.shade_code || "N/A") === shade);
+      return {
+        fabric,
+        shade,
+        currentMeters: Number(stockItem?.current_meters || 0),
+        days,
+      };
+    })
+    .sort((a, b) => b.days - a.days)
+    .slice(0, 10);
+
+  const agingBody = id("agingBody");
+  if (agingBody) {
+    agingBody.innerHTML = aging.length
+      ? aging.map((row) => `<tr><td>${row.fabric}</td><td>${row.shade || "N/A"}</td><td class="text-right">${row.currentMeters.toFixed(2)}</td><td class="text-right">${row.days}</td></tr>`).join("")
+      : '<tr><td colspan="4" class="text-center text-base-content/60">No aging data available.</td></tr>';
+  }
+
+  const activityList = id("activityList");
+  if (activityList) {
+    const recent = [...ledger].slice(0, 8);
+    activityList.innerHTML = recent.length
+      ? recent.map((x) => `
+          <div class="p-3 border border-base-300 rounded-lg bg-base-200">
+            <p class="text-sm font-medium">${x.transaction_type} ${x.fabric || "Item"} (${Number(x.meters || 0).toFixed(2)}m)</p>
+            <p class="text-xs text-base-content/70">${x.created_at || "-"}</p>
+          </div>
+        `).join("")
+      : '<p class="text-sm text-base-content/60">No activity logs yet.</p>';
+  }
+}
+
+wireButtons();
+loadDashboard();

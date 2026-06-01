@@ -2,57 +2,101 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>The Koshak – Login</title>
-  <link rel="stylesheet" href="styles.css" />
-  <style>
-    body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
-    .login-card { width:100%; max-width:360px; }
-    .login-card h1 { color:#1d4ed8; font-size:28px; margin:0 0 4px; }
-    .login-card p  { color:#94a3b8; font-size:14px; margin:0 0 24px; }
-    .form-group { margin-bottom:16px; }
-    label  { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
-    input  { width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px;
-             font-size:15px; box-sizing:border-box; outline:none; }
-    input:focus { border-color:#1d4ed8; box-shadow:0 0 0 3px #dbeafe; }
-    .btn   { width:100%; padding:12px; margin-top:8px; font-size:15px; font-weight:600; }
-    .error { color:#dc2626; font-size:13px; text-align:center; margin-top:8px; min-height:20px; }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Koshak ERP - Login</title>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-  <div class="card login-card">
-    <div style="text-align:center">
-      <h1>The Koshak</h1>
-      <p>Inventory Management System</p>
-    </div>
-    <form id="loginForm">
-      <div class="form-group">
-        <label for="phone">Phone Number</label>
-        <input id="phone" type="text" placeholder="e.g. 9876543210" autocomplete="tel" required />
+<body class="min-h-screen bg-base-200">
+  <div class="min-h-screen grid lg:grid-cols-2">
+    <section class="flex items-center justify-center p-6 sm:p-10">
+      <div class="w-full max-w-md bg-base-100 border border-base-300 rounded-2xl shadow-xl p-6 sm:p-8">
+        <div class="mb-8">
+          <h1 class="text-3xl font-bold tracking-tight">Welcome Back</h1>
+          <p class="text-base-content/70 mt-2">Sign in to continue to your inventory workspace.</p>
+        </div>
+
+        <form id="loginForm" class="space-y-5">
+          <div class="form-control">
+            <label class="label" for="phone">
+              <span class="label-text font-semibold">Phone Number</span>
+            </label>
+            <div class="join w-full">
+              <span class="join-item btn btn-disabled">+91</span>
+              <input id="phone" type="text" inputmode="numeric" placeholder="9876543210" class="join-item input input-bordered w-full" required />
+            </div>
+          </div>
+
+          <div class="form-control">
+            <label class="label" for="password">
+              <span class="label-text font-semibold">Password</span>
+            </label>
+            <div class="relative">
+              <input id="password" type="password" placeholder="Enter your password" class="input input-bordered w-full pr-12" required />
+              <button id="togglePassword" type="button" class="btn btn-ghost btn-sm absolute right-1 top-1/2 -translate-y-1/2" aria-label="Toggle password visibility">
+                <svg id="eyeOpen" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7S3.732 16.057 2.458 12z" />
+                </svg>
+                <svg id="eyeClosed" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.956 9.956 0 012.292-3.95m2.11-1.683A9.956 9.956 0 0112 5c4.478 0 8.268 2.943 9.542 7a9.962 9.962 0 01-4.293 5.225M15 12a3 3 0 00-4.122-2.793M3 3l18 18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <p class="text-error text-sm min-h-5" id="loginError"></p>
+          <button type="submit" class="btn btn-primary w-full" id="loginBtn">Sign In</button>
+        </form>
       </div>
-      <div class="form-group">
-        <label for="password">Password</label>
-        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required />
+    </section>
+
+    <section class="hidden lg:flex items-center justify-center bg-gradient-to-br from-primary via-info to-accent p-10">
+      <div class="max-w-lg text-primary-content">
+        <p class="badge badge-ghost border-primary-content/40 text-primary-content mb-6">The Koshak ERP Suite</p>
+        <h2 class="text-4xl font-bold leading-tight">AI-Powered Textile Management</h2>
+        <p class="mt-6 text-lg text-primary-content/90">
+          Monitor stock in real time, reduce stockouts, and run inward/outward operations from one secure control center.
+        </p>
+        <div class="mt-8 grid grid-cols-2 gap-4">
+          <div class="bg-primary-content/10 rounded-xl p-4 border border-primary-content/20">
+            <p class="text-2xl font-bold">99.9%</p>
+            <p class="text-sm text-primary-content/80">Data Availability</p>
+          </div>
+          <div class="bg-primary-content/10 rounded-xl p-4 border border-primary-content/20">
+            <p class="text-2xl font-bold">24x7</p>
+            <p class="text-sm text-primary-content/80">Warehouse Visibility</p>
+          </div>
+        </div>
       </div>
-      <p class="error" id="loginError"></p>
-      <button class="btn" type="submit" id="loginBtn">Login</button>
-    </form>
+    </section>
   </div>
 
-  <script src="config.js?v=20260601"></script>
-  <script src="auth.js?v=20260601"></script>
+  <script src="config.js?v=20260602"></script>
+  <script src="auth.js?v=20260602"></script>
   <script>
-    // If already logged in, go straight to dashboard
     if (Auth.isLoggedIn()) {
       window.location.replace("index.html");
     }
+
+    const passwordInput = document.getElementById("password");
+    const toggleButton = document.getElementById("togglePassword");
+    const eyeOpen = document.getElementById("eyeOpen");
+    const eyeClosed = document.getElementById("eyeClosed");
+
+    toggleButton.addEventListener("click", () => {
+      const isPassword = passwordInput.type === "password";
+      passwordInput.type = isPassword ? "text" : "password";
+      eyeOpen.classList.toggle("hidden", isPassword);
+      eyeClosed.classList.toggle("hidden", !isPassword);
+    });
 
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const btn = document.getElementById("loginBtn");
       const errEl = document.getElementById("loginError");
       btn.disabled = true;
-      btn.textContent = "Logging in…";
+      btn.textContent = "Signing in...";
       errEl.textContent = "";
 
       const result = await Auth.login(
@@ -65,7 +109,7 @@
       } else {
         errEl.textContent = result.error;
         btn.disabled = false;
-        btn.textContent = "Login";
+        btn.textContent = "Sign In";
       }
     });
   </script>
