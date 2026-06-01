@@ -43,17 +43,21 @@ function wireButtons() {
 }
 
 async function loadDashboard() {
-  const [statsResp, stockResp, ledgerResp] = await Promise.all([
-    Auth.apiFetch("/api/data/stats"),
-    Auth.apiFetch("/api/data/stock"),
-    Auth.apiFetch("/api/data/ledger"),
-  ]);
+  try {
+    const [statsResp, stockResp, ledgerResp] = await Promise.all([
+      Auth.apiFetch("/api/data/stats"),
+      Auth.apiFetch("/api/data/stock"),
+      Auth.apiFetch("/api/data/ledger"),
+    ]);
 
-  if (!statsResp || !stockResp || !ledgerResp) return;
+    if (!statsResp || !stockResp || !ledgerResp) {
+      clearAllLoadingStates();
+      return;
+    }
 
-  const stats = await statsResp.json();
-  const stock = await stockResp.json();
-  const ledger = await ledgerResp.json();
+    const stats = await statsResp.json();
+    const stock = await stockResp.json();
+    const ledger = await ledgerResp.json();
 
   setText("netStock", stats.net_stock ?? 0);
   setText("totalThaans", stats.total_thaans ?? 0);
@@ -111,8 +115,7 @@ async function loadDashboard() {
     .slice(0, 10);
 
   const fastSlowBody = id("fastSlowBody");
-  if (fastSlowBody) {
-    fastSlowBody.innerHTML = topFastSlow.length
+  if (fastSlowBody) {    console.log("Fast/Slow data:", { count: topFastSlow.length, data: topFastSlow });    fastSlowBody.innerHTML = topFastSlow.length
       ? topFastSlow.map((row) => `<tr><td>${row.fabric}</td><td>${row.shade || "N/A"}</td><td class="text-right">${row.outward.toFixed(2)}</td></tr>`).join("")
       : '<tr><td colspan="3" class="text-center text-base-content/60">No movement data.</td></tr>';
   }
@@ -160,6 +163,23 @@ async function loadDashboard() {
         `).join("")
       : '<p class="text-sm text-base-content/60">No activity logs yet.</p>';
   }
+  } catch (error) {
+    console.error("Error loading dashboard:", error);
+    clearAllLoadingStates();
+  }
+}
+
+function clearAllLoadingStates() {
+  const clearElement = (elId, colspan) => {
+    const el = id(elId);
+    if (el) el.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-base-content/60 py-6">Failed to load data</td></tr>`;
+  };
+  clearElement("recentBody", 5);
+  clearElement("fastSlowBody", 3);
+  clearElement("agingBody", 4);
+  
+  const activityEl = id("activityList");
+  if (activityEl) activityEl.innerHTML = '<p class="text-sm text-base-content/60">Failed to load activity</p>';
 }
 
 wireButtons();
