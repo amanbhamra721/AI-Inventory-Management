@@ -44,6 +44,9 @@ def run_pipeline(image_path, doc_type, attempt=1, max_retries=3, retry_hint=None
     3. TABULAR DATA: Follow the rows carefully. Match the Quality/Fabric name with its respective Shade Codes, Thaans (pieces), and Meters.
     4. FRACTIONS: If handwritten fractions exist (1/4, 1/2, 3/4), transcribe them clearly.
     5. TOTALS: Capture the exact printed or written total meters and thaans at the bottom. Do NOT calculate them yourself.
+    6. ROW INTEGRITY: Treat each data row as one line item. Do not merge two rows into one and do not split one row into multiple items.
+    7. NO SUMMARY AS ITEM: Never include headers, footer totals, grand totals, narration, or remarks as a line item.
+    8. NUMERIC CLARITY: Keep numbers exactly as printed; if uncertain, prefer null instead of guessing.
 
     Output a clean text representation of this data.
     """
@@ -54,7 +57,11 @@ def run_pipeline(image_path, doc_type, attempt=1, max_retries=3, retry_hint=None
 
     CRITICAL MATH & DATA RULES:
     1. Convert all fractions to decimals (e.g., 1/4 = 0.25, 1/2 = 0.50, 3/4 = 0.75).
-    2. SUM RECONCILIATION: Sum the `meters` from your extracted items. It MUST match the printed `total_meters` at the bottom of the slip. If it does not, you made a mistake reading a row. Correct it silently before outputting JSON.
+    2. SUM RECONCILIATION: Sum the `meters` from extracted items and match printed `total_meters`. If mismatch, re-check row mapping before output.
+    3. THAAN RECONCILIATION: Sum the `thaans` from extracted items and match printed `total_thaans`. If mismatch, re-check row mapping before output.
+    4. ITEM PURITY: Only actual fabric rows can appear inside `items`. Never include totals/header/narration rows as items.
+    5. MISSING FIELDS: If barcode/shade/price/reference is absent, return null or 0 (for price), but do not invent values.
+    6. OUTPUT ONLY JSON: Return a single strict JSON object with no prose or markdown.
 
     Use this exact JSON structure:
     {
@@ -87,6 +94,7 @@ def run_pipeline(image_path, doc_type, attempt=1, max_retries=3, retry_hint=None
 
     if retry_hint:
         ocr_prompt += f"\nPREVIOUS VALIDATION FAILED: {retry_hint}\nPlease re-scan and correct this specific error."
+        json_prompt += f"\n\nPREVIOUS VALIDATION FAILED: {retry_hint}\nCorrect the extraction so JSON satisfies this validation."
 
     # Step 1: OCR
     print(f"[{doc_type} Step 1] Running Omni-OCR Scan...")
