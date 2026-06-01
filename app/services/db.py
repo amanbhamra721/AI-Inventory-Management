@@ -94,6 +94,7 @@ def setup_database():
         sender_phone VARCHAR(20),
         source_image VARCHAR(255),
         image_path TEXT,
+        image_hash VARCHAR(64),
         confidence_score NUMERIC(5,2) DEFAULT 0,
         reason TEXT,
         payload JSONB,
@@ -194,11 +195,13 @@ def setup_database():
         cur.execute("CREATE INDEX IF NOT EXISTS idx_edit_requests_status ON inventory_edit_requests(sender_phone, status);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_catalog_sender_canonical ON product_catalog(sender_phone, canonical_name);")
         cur.execute("ALTER TABLE ai_review_queue ADD COLUMN IF NOT EXISTS image_path TEXT;")
+        cur.execute("ALTER TABLE ai_review_queue ADD COLUMN IF NOT EXISTS image_hash VARCHAR(64);")
         cur.execute("ALTER TABLE ai_review_queue ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0;")
         cur.execute("ALTER TABLE ai_review_queue ADD COLUMN IF NOT EXISTS max_retry_count INTEGER DEFAULT 3;")
         cur.execute("ALTER TABLE ai_review_queue ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMP WITH TIME ZONE;")
         cur.execute("ALTER TABLE ai_review_queue ADD COLUMN IF NOT EXISTS last_error TEXT;")
         cur.execute("ALTER TABLE ai_review_queue ADD COLUMN IF NOT EXISTS processed_at TIMESTAMP WITH TIME ZONE;")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_review_queue_image_hash ON ai_review_queue(image_hash);")
         conn.commit()
         print("✅ Database schema verified and upgraded.")
     except Exception as e:
@@ -252,7 +255,50 @@ def enqueue_ai_review(sender_phone: str, payload: dict, reason: str, confidence_
         conn.close()
 
 
-def enqueue_document_retry(sender_phone: str, image_path: str, reason: str, payload: dict | None = None, confidence_score: float = 0.0, max_retry_count: int = 3, delay_minutes: int = 10):
+def get_document_retry_by_id(queue_id: int):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT * FROM ai_review_queue WHERE id = %s LIMIT 1", (queue_id,))
+        return cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_document_retry_by_hash(image_hash: str, sender_phone: str | None = None):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        if sender_phone:
+            cur.execute(
+                """
+                SELECT *
+                FROM ai_review_queue
+                WHERE image_hash = %s AND sender_phone = %s AND status IN ('PENDING', 'RETRYING', 'FAILED_MANUAL_REVIEW')
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (image_hash, sender_phone),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT *
+                FROM ai_review_queue
+                WHERE image_hash = %s AND status IN ('PENDING', 'RETRYING', 'FAILED_MANUAL_REVIEW')
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (image_hash,),
+            )
+        return cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def enqueue_document_retry(sender_phone: str, image_path: str, reason: str, payload: dict | None = None, confidence_score: float = 0.0, max_retry_count: int = 3, delay_minutes: int = 10, image_hash: str | None = None):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
@@ -262,6 +308,7 @@ def enqueue_document_retry(sender_phone: str, image_path: str, reason: str, payl
                 sender_phone,
                 source_image,
                 image_path,
+                image_hash,
                 confidence_score,
                 reason,
                 payload,
@@ -270,10 +317,10 @@ def enqueue_document_retry(sender_phone: str, image_path: str, reason: str, payl
                 next_retry_at,
                 status
             )
-            VALUES (%s, %s, %s, %s, %s, %s, 0, %s, NOW() + (%s || ' minutes')::interval, 'PENDING')
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, NOW() + (%s || ' minutes')::interval, 'PENDING')
             RETURNING id
             """,
-            (sender_phone, os.path.basename(image_path), image_path, confidence_score, reason, json.dumps(payload or {}), max_retry_count, delay_minutes),
+            (sender_phone, os.path.basename(image_path), image_path, image_hash, confidence_score, reason, json.dumps(payload or {}), max_retry_count, delay_minutes),
         )
         queue_id = cur.fetchone()["id"]
         conn.commit()
@@ -350,6 +397,25 @@ def mark_document_retry_complete(queue_id: int):
             WHERE id = %s
             """,
             (queue_id,),
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def update_document_retry_image(queue_id: int, image_path: str, image_hash: str | None = None):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            UPDATE ai_review_queue
+            SET image_path = %s,
+                image_hash = COALESCE(%s, image_hash)
+            WHERE id = %s
+            """,
+            (image_path, image_hash, queue_id),
         )
         conn.commit()
     finally:

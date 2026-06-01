@@ -17,6 +17,35 @@
         </div>
 
         <div class="p-4 border border-base-300 rounded-lg bg-base-200">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <h2 class="font-semibold">Failed Document Retries</h2>
+                    <p class="text-sm text-base-content/70 mt-1">Images that exhausted retry attempts are kept here for manual recovery.</p>
+                </div>
+                <span class="badge badge-outline">{{ failed_retries | length }} queued</span>
+            </div>
+
+            <div class="mt-4 space-y-3">
+                {% for item in failed_retries | default([], true) %}
+                <div class="bg-base-100 border border-base-300 rounded-xl p-3">
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p class="font-medium">{{ item.source_image or 'Recovered image' }}</p>
+                            <p class="text-xs text-base-content/60">{{ item.reason }}</p>
+                            <p class="text-xs text-base-content/60">Retry count: {{ item.retry_count }} / {{ item.max_retry_count }}{% if item.last_error %} | Last error: {{ item.last_error }}{% endif %}</p>
+                        </div>
+                        <form method="post" action="/retry-now/{{ item.id }}">
+                            <button type="submit" class="btn btn-primary btn-sm rounded-xl">Retry Now</button>
+                        </form>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-sm text-base-content/60">No failed images waiting for manual retry.</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="p-4 border border-base-300 rounded-lg bg-base-200">
             <h2 class="font-semibold">Account</h2>
             <p class="text-sm text-base-content/70 mt-1">Use the top-right menu to log out securely.</p>
         </div>

@@ -11,7 +11,9 @@ from app.services.db import (
     get_activity_logs,
     get_fast_slow_moving,
     get_aging_report,
+    get_failed_document_retries,
 )
+from app.services.document_retry_worker import retry_document_now
 from app.services.auth import verify_password
 import re
 from typing import Optional
@@ -154,7 +156,18 @@ async def settings_page(request: Request):
     phone = request.cookies.get("auth_user")
     if not phone:
         return RedirectResponse(url="/login")
-    return templates.TemplateResponse("settings.html", {"request": request})
+    failed_retries = get_failed_document_retries(sender_phone=phone, limit=20)
+    return templates.TemplateResponse("settings.html", {"request": request, "failed_retries": failed_retries})
+
+
+@router.post("/retry-now/{queue_id}")
+async def retry_document_now_view(request: Request, queue_id: int):
+    phone = request.cookies.get("auth_user")
+    if not phone:
+        return RedirectResponse(url="/login", status_code=303)
+
+    result_ok, _message = retry_document_now(queue_id)
+    return RedirectResponse(url="/settings", status_code=303)
 
 @router.get("/login")
 async def login_page(request: Request):

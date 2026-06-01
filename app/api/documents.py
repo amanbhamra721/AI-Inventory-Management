@@ -1,4 +1,5 @@
 import os
+import hashlib
 import tempfile
 import shutil
 from typing import Optional
@@ -8,6 +9,8 @@ from pydantic import BaseModel, Field
 
 from app.services.db import (
     enqueue_document_retry,
+    get_document_retry_by_hash,
+    get_document_retry_by_id,
     get_failed_document_retries,
     get_due_document_retries,
     get_product_catalog,
@@ -16,10 +19,15 @@ from app.services.db import (
     upsert_product_catalog_entry,
 )
 from app.services.document_router import process_document, run_pipeline
+from app.services.document_retry_worker import retry_document_now
 from app.services.jwt_auth import get_current_phone
 
 router = APIRouter()
 PERSISTENT_IMAGE_DIR = os.path.join("app", "storage", "pending_documents")
+
+
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
 
 class CatalogUpsertRequest(BaseModel):
@@ -41,17 +49,30 @@ async def api_process_document(
     suffix = os.path.splitext(image.filename)[1] or ".jpg"
     temp_path = None
     persistent_path = None
+    image_hash = None
 
     try:
         os.makedirs(PERSISTENT_IMAGE_DIR, exist_ok=True)
         image_bytes = await image.read()
+        image_hash = _sha256_bytes(image_bytes)
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
             temp_file.write(image_bytes)
             temp_path = temp_file.name
 
-        persistent_filename = f"{phone}_{int(os.path.getmtime(temp_path))}_{os.path.basename(image.filename)}"
+        persistent_filename = f"{image_hash}{suffix.lower()}"
         persistent_path = os.path.join(PERSISTENT_IMAGE_DIR, persistent_filename)
-        shutil.copy2(temp_path, persistent_path)
+        if not os.path.exists(persistent_path):
+            shutil.copy2(temp_path, persistent_path)
+
+        existing_queue = get_document_retry_by_hash(image_hash, sender_phone=phone)
+        if existing_queue and existing_queue.get("status") in {"PENDING", "RETRYING"}:
+            return {
+                "ok": True,
+                "message": "Duplicate image content already queued for retry; reused stored copy.",
+                "retry_queue_id": existing_queue.get("id"),
+                "image_hash": image_hash,
+                "stored_path": existing_queue.get("image_path") or persistent_path,
+            }
 
         if transaction_type:
             doc_type = transaction_type.strip().upper()
@@ -67,6 +88,7 @@ async def api_process_document(
                 image_path=persistent_path,
                 reason="PARSER_RETURNED_NO_PAYLOAD",
                 payload={"transaction_type": transaction_type},
+                image_hash=image_hash,
             )
             raise HTTPException(status_code=422, detail="Could not extract valid structured data from document")
 
@@ -77,6 +99,7 @@ async def api_process_document(
                 image_path=persistent_path,
                 reason=message,
                 payload=payload,
+                image_hash=image_hash,
             )
             raise HTTPException(status_code=400, detail=message)
 
@@ -90,6 +113,7 @@ async def api_process_document(
             "metadata": payload.get("metadata", {}),
             "summary": payload.get("summary", {}),
             "items_count": len(payload.get("items", []) or []),
+            "image_hash": image_hash,
         }
     finally:
         if temp_path and os.path.exists(temp_path):
@@ -176,3 +200,20 @@ def api_failed_retries(phone: str = Depends(get_current_phone)):
         }
         for row in rows
     ]
+
+
+@router.post("/documents/retries/{queue_id}/retry-now")
+def api_retry_now(queue_id: int, phone: str = Depends(get_current_phone)):
+    row = get_document_retry_by_id(queue_id)
+    if not row or row.get("sender_phone") != phone:
+        raise HTTPException(status_code=404, detail="Retry item not found")
+
+    ok, message = retry_document_now(queue_id)
+    refreshed = get_document_retry_by_id(queue_id)
+    return {
+        "ok": ok,
+        "message": message,
+        "status": refreshed.get("status") if refreshed else None,
+        "retry_count": refreshed.get("retry_count") if refreshed else None,
+        "image_path": refreshed.get("image_path") if refreshed else None,
+    }

@@ -3,6 +3,7 @@ import threading
 import time
 
 from app.services.db import (
+    get_document_retry_by_id,
     get_due_document_retries,
     insert_transaction,
     mark_document_retry_attempt,
@@ -11,7 +12,7 @@ from app.services.db import (
 from app.services.document_router import process_document
 
 
-def _process_retry_item(item: dict):
+def process_retry_item(item: dict):
     queue_id = item["id"]
     sender_phone = item["sender_phone"]
     image_path = item.get("image_path")
@@ -42,7 +43,23 @@ def _process_retry_item(item: dict):
 
 def process_due_document_retries(limit: int = 10):
     for item in get_due_document_retries(limit=limit):
-        _process_retry_item(item)
+        process_retry_item(item)
+
+
+def retry_document_now(queue_id: int):
+    item = get_document_retry_by_id(queue_id)
+    if not item:
+        return False, "Retry queue item not found"
+    process_retry_item(item)
+    refreshed = get_document_retry_by_id(queue_id)
+    if not refreshed:
+        return False, "Retry queue item disappeared unexpectedly"
+    status = refreshed.get("status")
+    if status == "COMPLETED":
+        return True, "Retry completed successfully"
+    if status == "FAILED_MANUAL_REVIEW":
+        return False, refreshed.get("last_error") or "Retry attempts exhausted"
+    return False, refreshed.get("last_error") or "Retry still pending"
 
 
 def start_document_retry_worker(poll_seconds: int = 60, batch_limit: int = 10):
