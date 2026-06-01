@@ -5,6 +5,7 @@ import os
 from app.web.dashboard import router as web_router
 from app.api.auth import router as auth_router
 from app.api.public_data import router as data_router
+from app.api.documents import router as documents_router
 
 app = FastAPI(title="The Koshak Inventory")
 
@@ -26,6 +27,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(web_router)                       # Now at api.thekoshak.com/
 app.include_router(auth_router, prefix="/api")       # POST /api/auth/login  — token-based login
 app.include_router(data_router, prefix="/api")       # GET  /api/data/stock|stats|ledger|export/csv
+app.include_router(documents_router, prefix="/api")  # POST /api/documents/process + catalog aliases APIs
 
 @app.get("/health")
 def health_check():

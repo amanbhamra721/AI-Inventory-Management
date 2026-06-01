@@ -115,7 +115,8 @@ async function loadDashboard() {
     .slice(0, 10);
 
   const fastSlowBody = id("fastSlowBody");
-  if (fastSlowBody) {    console.log("Fast/Slow data:", { count: topFastSlow.length, data: topFastSlow });    fastSlowBody.innerHTML = topFastSlow.length
+  if (fastSlowBody) {
+    fastSlowBody.innerHTML = topFastSlow.length
       ? topFastSlow.map((row) => `<tr><td>${row.fabric}</td><td>${row.shade || "N/A"}</td><td class="text-right">${row.outward.toFixed(2)}</td></tr>`).join("")
       : '<tr><td colspan="3" class="text-center text-base-content/60">No movement data.</td></tr>';
   }

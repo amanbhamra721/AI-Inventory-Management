@@ -50,6 +50,10 @@
                 </svg>
                 <input type="text" id="searchInput" placeholder="Search fabric, shade, bale..." class="grow" />
               </label>
+              <select id="brandFilter" class="select select-bordered w-full sm:w-44">
+                <option value="">All Brands</option>
+              </select>
+              <input type="text" id="partyFilter" class="input input-bordered w-full sm:w-56" placeholder="Party name" />
               <select id="typeFilter" class="select select-bordered w-full sm:w-44">
                 <option value="">All Types</option>
                 <option value="INWARD">Inward</option>
@@ -64,6 +68,9 @@
               <thead>
                 <tr>
                   <th>Fabric Name</th>
+                  <th>Brand</th>
+                  <th>Party</th>
+                  <th>Reference</th>
                   <th>Shade Code</th>
                   <th>Bale Number</th>
                   <th>Inward/Outward</th>
@@ -73,7 +80,7 @@
                 </tr>
               </thead>
               <tbody id="inventoryBody">
-                <tr><td colspan="6" class="text-center py-6"><span class="loading loading-spinner loading-sm"></span></td></tr>
+                <tr><td colspan="10" class="text-center py-6"><span class="loading loading-spinner loading-sm"></span></td></tr>
               </tbody>
             </table>
           </div>
@@ -106,12 +113,15 @@
     function renderRows(rows) {
       const body = document.getElementById("inventoryBody");
       if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="7" class="text-center text-base-content/60 py-6">No inventory records found.</td></tr>';
+        body.innerHTML = '<tr><td colspan="10" class="text-center text-base-content/60 py-6">No inventory records found.</td></tr>';
         return;
       }
       body.innerHTML = rows.map((item) => `
         <tr>
           <td class="font-medium">${item.fabric || "N/A"}</td>
+          <td>${item.brand_name || "BR"}</td>
+          <td>${item.party_name || "-"}</td>
+          <td>${item.reference_no || "-"}</td>
           <td>${item.shade_code || "N/A"}</td>
           <td>${item.bale_no || "-"}</td>
           <td>${item.transaction_type === "INWARD" ? '<span class="badge badge-success">Inward</span>' : '<span class="badge badge-error">Outward</span>'}</td>
@@ -122,14 +132,29 @@
       `).join("");
     }
 
+    function rebuildBrandFilterOptions(rows) {
+      const select = document.getElementById("brandFilter");
+      const selected = select.value;
+      const brands = [...new Set(rows.map((r) => (r.brand_name || "BR").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+      select.innerHTML = '<option value="">All Brands</option>' + brands.map((brand) => `<option value="${brand}">${brand}</option>`).join("");
+      if (selected && brands.includes(selected)) {
+        select.value = selected;
+      }
+    }
+
     function applyFilter() {
       const q = document.getElementById("searchInput").value.trim().toLowerCase();
       const t = document.getElementById("typeFilter").value;
+      const b = document.getElementById("brandFilter").value;
+      const p = document.getElementById("partyFilter").value.trim().toLowerCase();
       const filtered = allRows.filter((r) => {
-        const text = `${r.fabric || ""} ${r.shade_code || ""} ${r.bale_no || ""}`.toLowerCase();
+        const text = `${r.fabric || ""} ${r.brand_name || ""} ${r.party_name || ""} ${r.reference_no || ""} ${r.shade_code || ""} ${r.bale_no || ""}`.toLowerCase();
         const bySearch = !q || text.includes(q);
         const byType = !t || r.transaction_type === t;
-        return bySearch && byType;
+        const byBrand = !b || (r.brand_name || "BR") === b;
+        const byParty = !p || (r.party_name || "").toLowerCase().includes(p);
+        return bySearch && byType && byBrand && byParty;
       });
       renderRows(filtered);
     }
@@ -138,11 +163,16 @@
       const resp = await Auth.apiFetch("/api/data/ledger");
       if (!resp) return;
       allRows = await resp.json();
+      rebuildBrandFilterOptions(allRows);
       applyFilter();
     }
 
     document.getElementById("applyBtn").addEventListener("click", applyFilter);
+    document.getElementById("brandFilter").addEventListener("change", applyFilter);
     document.getElementById("searchInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") applyFilter();
+    });
+    document.getElementById("partyFilter").addEventListener("keydown", (e) => {
       if (e.key === "Enter") applyFilter();
     });
 

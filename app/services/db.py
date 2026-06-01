@@ -63,6 +63,19 @@ def setup_database():
     );
     """
 
+    create_product_catalog_table = """
+    CREATE TABLE IF NOT EXISTS product_catalog (
+        id SERIAL PRIMARY KEY,
+        sender_phone VARCHAR(20),
+        canonical_name VARCHAR(150) NOT NULL,
+        aliases TEXT[] DEFAULT '{}',
+        brand_name VARCHAR(100),
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(sender_phone, canonical_name)
+    );
+    """
+
     create_audit_table = """
     CREATE TABLE IF NOT EXISTS audit_logs (
         id SERIAL PRIMARY KEY,
@@ -150,6 +163,7 @@ def setup_database():
         cur.execute(create_users_table)
         cur.execute(create_receipts_table)
         cur.execute(create_ledger_table)
+        cur.execute(create_product_catalog_table)
         cur.execute(create_audit_table)
         cur.execute(create_review_queue)
         cur.execute(create_edit_requests)
@@ -165,10 +179,15 @@ def setup_database():
         cur.execute("ALTER TABLE inventory_ledger ADD COLUMN IF NOT EXISTS is_reversal BOOLEAN DEFAULT FALSE;")
         cur.execute("ALTER TABLE inventory_ledger ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;")
         cur.execute("ALTER TABLE inventory_ledger ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE;")
+        cur.execute("ALTER TABLE inventory_ledger ADD COLUMN IF NOT EXISTS brand_name VARCHAR(100) DEFAULT 'BR';")
+        cur.execute("ALTER TABLE inventory_ledger ADD COLUMN IF NOT EXISTS party_name VARCHAR(255);")
+        cur.execute("ALTER TABLE inventory_ledger ADD COLUMN IF NOT EXISTS reference_no VARCHAR(100);")
 
         cur.execute("CREATE INDEX IF NOT EXISTS idx_ledger_sender_created ON inventory_ledger(sender_phone, created_at DESC);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_ledger_fabric_shade ON inventory_ledger(sender_phone, fabric, shade_code);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_ledger_brand_party ON inventory_ledger(sender_phone, brand_name, party_name);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_edit_requests_status ON inventory_edit_requests(sender_phone, status);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_catalog_sender_canonical ON product_catalog(sender_phone, canonical_name);")
         conn.commit()
         print("✅ Database schema verified and upgraded.")
     except Exception as e:
@@ -253,6 +272,111 @@ def _extract_confidence(data: dict) -> float:
     return 0.90
 
 
+def normalize_quality_name(extracted_name: str, sender_phone: str | None = None) -> str:
+    """Resolve extracted quality names to a canonical product_catalog entry via aliases."""
+    cleaned = (extracted_name or "").strip()
+    if not cleaned:
+        return "Unknown Fabric"
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT canonical_name
+            FROM product_catalog
+            WHERE is_active = TRUE
+              AND (sender_phone = %s OR sender_phone IS NULL)
+              AND (
+                    LOWER(canonical_name) = LOWER(%s)
+                    OR EXISTS (
+                        SELECT 1
+                        FROM unnest(COALESCE(aliases, ARRAY[]::TEXT[])) AS alias_name
+                        WHERE LOWER(alias_name) = LOWER(%s)
+                    )
+              )
+            ORDER BY sender_phone NULLS FIRST
+            LIMIT 1
+            """,
+            (sender_phone, cleaned, cleaned),
+        )
+        row = cur.fetchone() or {}
+        return (row.get("canonical_name") or cleaned).strip()
+    except Exception:
+        return cleaned
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_product_catalog(sender_phone: str, brand_name: str | None = None, query: str | None = None):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    sql = """
+    SELECT id, sender_phone, canonical_name, aliases, brand_name, is_active, created_at
+    FROM product_catalog
+    WHERE (sender_phone = %s OR sender_phone IS NULL) AND is_active = TRUE
+    """
+    params = [sender_phone]
+
+    if brand_name:
+        sql += " AND COALESCE(brand_name, '') ILIKE %s"
+        params.append(f"%{brand_name}%")
+
+    if query:
+        sql += " AND (canonical_name ILIKE %s OR EXISTS (SELECT 1 FROM unnest(COALESCE(aliases, ARRAY[]::TEXT[])) AS a WHERE a ILIKE %s))"
+        p = f"%{query}%"
+        params.extend([p, p])
+
+    sql += " ORDER BY canonical_name ASC"
+    try:
+        cur.execute(sql, tuple(params))
+        return cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def upsert_product_catalog_entry(sender_phone: str, canonical_name: str, aliases: list[str] | None = None, brand_name: str | None = None):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cleaned_name = (canonical_name or "").strip()
+        if not cleaned_name:
+            raise ValueError("canonical_name is required")
+
+        cleaned_aliases = []
+        for alias in aliases or []:
+            a = (alias or "").strip()
+            if a and a.lower() != cleaned_name.lower():
+                cleaned_aliases.append(a)
+
+        unique_aliases = list(dict.fromkeys(cleaned_aliases))
+
+        cur.execute(
+            """
+            INSERT INTO product_catalog (sender_phone, canonical_name, aliases, brand_name, is_active)
+            VALUES (%s, %s, %s, %s, TRUE)
+            ON CONFLICT (sender_phone, canonical_name)
+            DO UPDATE SET
+                aliases = EXCLUDED.aliases,
+                brand_name = EXCLUDED.brand_name,
+                is_active = TRUE
+            RETURNING id
+            """,
+            (sender_phone, cleaned_name, unique_aliases, brand_name),
+        )
+        row = cur.fetchone() or {}
+        conn.commit()
+        return row.get("id")
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+        conn.close()
+
+
 def insert_transaction(data, sender_phone="SYSTEM"):
     """
     Inserts AI transaction rows into inventory_ledger.
@@ -280,9 +404,13 @@ def insert_transaction(data, sender_phone="SYSTEM"):
 
         inserted_ids = []
         bale_no = metadata.get("bale_no") or metadata.get("receipt_no")
+        reference_no = metadata.get("reference_no") or metadata.get("invoice_no") or metadata.get("challan_no") or bale_no
+        brand_name = (metadata.get("brand_name") or "BR").strip()
+        party_name = metadata.get("party_name")
 
         for item in items:
-            fabric = (item.get("fabric") or data.get("fabric") or "Unknown Fabric").strip()
+            raw_fabric = (item.get("fabric") or data.get("fabric") or "Unknown Fabric").strip()
+            fabric = normalize_quality_name(raw_fabric, sender_phone)
             shade_code = (item.get("shade_code") or "").strip() or None
             meters = round(float(item.get("meters") or 0), 2)
             thaans = int(float(item.get("thaans") or 0))
@@ -313,11 +441,12 @@ def insert_transaction(data, sender_phone="SYSTEM"):
             cur.execute(
                 """
                 INSERT INTO inventory_ledger
-                (sender_phone, fabric, shade_code, transaction_type, meters, thaans, bale_no, source, review_status, confidence_score, unit_price)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, 'AI', 'APPROVED', %s, %s)
+                (sender_phone, fabric, shade_code, transaction_type, meters, thaans, bale_no, source, review_status, confidence_score, unit_price,
+                 brand_name, party_name, reference_no)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'AI', 'APPROVED', %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (sender_phone, fabric, shade_code, tx_type, meters, thaans, bale_no, confidence, unit_price),
+                (sender_phone, fabric, shade_code, tx_type, meters, thaans, bale_no, confidence, unit_price, brand_name, party_name, reference_no),
             )
             inserted_id = cur.fetchone()["id"]
             inserted_ids.append(inserted_id)
@@ -335,7 +464,7 @@ def insert_transaction(data, sender_phone="SYSTEM"):
             """,
             (
                 tx_type,
-                metadata.get("receipt_no") or metadata.get("bale_no"),
+                metadata.get("reference_no") or metadata.get("receipt_no") or metadata.get("bale_no"),
                 metadata.get("date"),
                 metadata.get("width"),
                 metadata.get("bale_no"),
@@ -358,11 +487,18 @@ def insert_transaction(data, sender_phone="SYSTEM"):
         conn.close()
 
 
-def get_inventory_details(sender_phone: str, search_term: str | None = None, tx_type: str | None = None):
+def get_inventory_details(
+    sender_phone: str,
+    search_term: str | None = None,
+    tx_type: str | None = None,
+    brand_name: str | None = None,
+    party_name: str | None = None,
+):
     conn = get_db_connection()
     cur = conn.cursor()
     query = """
-    SELECT id, fabric, shade_code, bale_no, transaction_type, meters, thaans, unit_price, source,
+        SELECT id, fabric, shade_code, bale_no, transaction_type, meters, thaans, unit_price, source,
+            brand_name, party_name, reference_no,
            review_status, confidence_score, created_at
     FROM inventory_ledger
     WHERE sender_phone = %s AND is_deleted = FALSE
@@ -370,9 +506,17 @@ def get_inventory_details(sender_phone: str, search_term: str | None = None, tx_
     params = [sender_phone]
 
     if search_term:
-        query += " AND (fabric ILIKE %s OR shade_code ILIKE %s OR COALESCE(bale_no,'') ILIKE %s)"
+        query += " AND (fabric ILIKE %s OR shade_code ILIKE %s OR COALESCE(bale_no,'') ILIKE %s OR COALESCE(brand_name,'') ILIKE %s OR COALESCE(party_name,'') ILIKE %s OR COALESCE(reference_no,'') ILIKE %s)"
         p = f"%{search_term}%"
-        params.extend([p, p, p])
+        params.extend([p, p, p, p, p, p])
+
+    if brand_name:
+        query += " AND COALESCE(brand_name, '') ILIKE %s"
+        params.append(f"%{brand_name}%")
+
+    if party_name:
+        query += " AND COALESCE(party_name, '') ILIKE %s"
+        params.append(f"%{party_name}%")
 
     if tx_type in {"INWARD", "OUTWARD"}:
         query += " AND transaction_type = %s"

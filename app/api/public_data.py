@@ -47,15 +47,30 @@ def api_stock(search: Optional[str] = None, phone: str = Depends(get_current_pho
 
 
 @router.get("/data/ledger")
-def api_ledger(phone: str = Depends(get_current_phone)):
+def api_ledger(
+    search: Optional[str] = None,
+    tx_type: Optional[str] = None,
+    brand_name: Optional[str] = None,
+    party_name: Optional[str] = None,
+    phone: str = Depends(get_current_phone),
+):
     """Full ledger history for the logged-in user."""
-    rows = get_inventory_details(phone)
+    rows = get_inventory_details(
+        phone,
+        search_term=search,
+        tx_type=tx_type,
+        brand_name=brand_name,
+        party_name=party_name,
+    )
     result = []
     for row in rows:
         result.append({
             "fabric":           row["fabric"],
             "shade_code":       row["shade_code"],
             "bale_no":          row["bale_no"],
+            "brand_name":       row.get("brand_name"),
+            "party_name":       row.get("party_name"),
+            "reference_no":     row.get("reference_no"),
             "transaction_type": row["transaction_type"],
             "meters":           float(row["meters"] or 0),
             "thaans":           int(row["thaans"] or 0),
