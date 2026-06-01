@@ -6,6 +6,7 @@ from app.web.dashboard import router as web_router
 from app.api.auth import router as auth_router
 from app.api.public_data import router as data_router
 from app.api.documents import router as documents_router
+from app.services.document_retry_worker import start_document_retry_worker
 
 app = FastAPI(title="The Koshak Inventory")
 
@@ -37,3 +38,4 @@ def health_check():
 def startup_db():
     from app.services.db import setup_database
     setup_database()
+    start_document_retry_worker()

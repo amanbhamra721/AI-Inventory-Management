@@ -93,9 +93,14 @@ def setup_database():
         id SERIAL PRIMARY KEY,
         sender_phone VARCHAR(20),
         source_image VARCHAR(255),
+        image_path TEXT,
         confidence_score NUMERIC(5,2) DEFAULT 0,
         reason TEXT,
         payload JSONB,
+        retry_count INTEGER DEFAULT 0,
+        max_retry_count INTEGER DEFAULT 3,
+        next_retry_at TIMESTAMP WITH TIME ZONE,
+        last_error TEXT,
         status VARCHAR(20) DEFAULT 'PENDING',
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         reviewed_at TIMESTAMP WITH TIME ZONE,
@@ -188,6 +193,12 @@ def setup_database():
         cur.execute("CREATE INDEX IF NOT EXISTS idx_ledger_brand_party ON inventory_ledger(sender_phone, brand_name, party_name);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_edit_requests_status ON inventory_edit_requests(sender_phone, status);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_catalog_sender_canonical ON product_catalog(sender_phone, canonical_name);")
+        cur.execute("ALTER TABLE ai_review_queue ADD COLUMN IF NOT EXISTS image_path TEXT;")
+        cur.execute("ALTER TABLE ai_review_queue ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0;")
+        cur.execute("ALTER TABLE ai_review_queue ADD COLUMN IF NOT EXISTS max_retry_count INTEGER DEFAULT 3;")
+        cur.execute("ALTER TABLE ai_review_queue ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMP WITH TIME ZONE;")
+        cur.execute("ALTER TABLE ai_review_queue ADD COLUMN IF NOT EXISTS last_error TEXT;")
+        cur.execute("ALTER TABLE ai_review_queue ADD COLUMN IF NOT EXISTS processed_at TIMESTAMP WITH TIME ZONE;")
         conn.commit()
         print("✅ Database schema verified and upgraded.")
     except Exception as e:
@@ -236,6 +247,135 @@ def enqueue_ai_review(sender_phone: str, payload: dict, reason: str, confidence_
     except Exception as e:
         conn.rollback()
         raise e
+    finally:
+        cur.close()
+        conn.close()
+
+
+def enqueue_document_retry(sender_phone: str, image_path: str, reason: str, payload: dict | None = None, confidence_score: float = 0.0, max_retry_count: int = 3, delay_minutes: int = 10):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            INSERT INTO ai_review_queue (
+                sender_phone,
+                source_image,
+                image_path,
+                confidence_score,
+                reason,
+                payload,
+                retry_count,
+                max_retry_count,
+                next_retry_at,
+                status
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, 0, %s, NOW() + (%s || ' minutes')::interval, 'PENDING')
+            RETURNING id
+            """,
+            (sender_phone, os.path.basename(image_path), image_path, confidence_score, reason, json.dumps(payload or {}), max_retry_count, delay_minutes),
+        )
+        queue_id = cur.fetchone()["id"]
+        conn.commit()
+        log_audit("QUEUE_DOCUMENT_RETRY", "ai_review_queue", queue_id, sender_phone, {"reason": reason, "image_path": image_path})
+        return queue_id
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_due_document_retries(limit: int = 10):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT *
+            FROM ai_review_queue
+            WHERE image_path IS NOT NULL
+              AND status IN ('PENDING', 'RETRYING')
+              AND COALESCE(retry_count, 0) < COALESCE(max_retry_count, 3)
+              AND (next_retry_at IS NULL OR next_retry_at <= NOW())
+            ORDER BY COALESCE(next_retry_at, created_at) ASC
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        return cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def mark_document_retry_attempt(queue_id: int, last_error: str, next_retry_minutes: int = 10):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            UPDATE ai_review_queue
+            SET retry_count = COALESCE(retry_count, 0) + 1,
+                last_error = %s,
+                status = CASE
+                    WHEN COALESCE(retry_count, 0) + 1 >= COALESCE(max_retry_count, 3) THEN 'FAILED_MANUAL_REVIEW'
+                    ELSE 'RETRYING'
+                END,
+                next_retry_at = CASE
+                    WHEN COALESCE(retry_count, 0) + 1 >= COALESCE(max_retry_count, 3) THEN NULL
+                    ELSE NOW() + (%s || ' minutes')::interval
+                END
+            WHERE id = %s
+            """,
+            (last_error, next_retry_minutes, queue_id),
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def mark_document_retry_complete(queue_id: int):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            UPDATE ai_review_queue
+            SET status = 'COMPLETED',
+                reviewed_at = NOW(),
+                processed_at = NOW()
+            WHERE id = %s
+            """,
+            (queue_id,),
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_failed_document_retries(sender_phone: str | None = None, limit: int = 50):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    query = """
+        SELECT id, sender_phone, source_image, image_path, confidence_score, reason, payload, retry_count, max_retry_count,
+               next_retry_at, last_error, status, created_at, reviewed_at, reviewed_by
+        FROM ai_review_queue
+        WHERE image_path IS NOT NULL
+          AND status = 'FAILED_MANUAL_REVIEW'
+    """
+    params = []
+    if sender_phone:
+        query += " AND sender_phone = %s"
+        params.append(sender_phone)
+    query += " ORDER BY created_at DESC LIMIT %s"
+    params.append(limit)
+    try:
+        cur.execute(query, tuple(params))
+        return cur.fetchall()
     finally:
         cur.close()
         conn.close()
